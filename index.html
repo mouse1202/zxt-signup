@@ -1455,6 +1455,54 @@
 (function () {
   var API = 'https://xltdagmzsycnqbflovff.supabase.co/functions/v1/zxtapi';
   var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster'];
+
+  function callServer(fn, args) {
+    return fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fn: fn, args: args }) }).then(function (r) { return r.json(); });
+  }
+
+  function buildRosterBlobUrl(payload) {
+    var sessions = (payload && payload.sessions) || [];
+    var wb = XLSX.utils.book_new();
+    sessions.forEach(function (session, si) {
+      var rows = session.rows || [];
+      var commanders = session.commanders || [];
+      var substitutes = session.substitutes || [];
+      var cmdMap = {};
+      commanders.forEach(function (c) { cmdMap[c.group] = c.name; });
+      var groups = [], gIdx = {};
+      rows.forEach(function (row) {
+        if (!(row.group in gIdx)) { gIdx[row.group] = groups.length; groups.push({ name: row.group, teams: [], tIdx: {} }); }
+        var g = groups[gIdx[row.group]];
+        if (!(row.team in g.tIdx)) { g.tIdx[row.team] = g.teams.length; g.teams.push({ name: row.team, bySlot: {}, maxSlot: 0 }); }
+        var t = g.teams[g.tIdx[row.team]];
+        var slot = Number(row.slot); t.bySlot[slot] = row; t.maxSlot = Math.max(t.maxSlot, slot);
+      });
+      var aoa = [];
+      groups.forEach(function (group) {
+        aoa.push([group.name, '\u6307\u63ee\uff1a' + (cmdMap[group.name] || '')]);
+        var header = [];
+        group.teams.forEach(function (team) { header.push(team.name, '\u6280\u80fd'); });
+        aoa.push(header);
+        var teamSize = 0; group.teams.forEach(function (t) { teamSize = Math.max(teamSize, t.maxSlot); });
+        for (var i = 1; i <= teamSize; i++) {
+          var line = [];
+          group.teams.forEach(function (team) { var p = team.bySlot[i]; line.push(p ? p.name : '', p ? p.note : ''); });
+          aoa.push(line);
+        }
+        aoa.push([]);
+      });
+      aoa.push(['\u5019\u88dc']);
+      if (substitutes.length === 0) { aoa.push(['\uff08\u7121\uff09']); }
+      else { substitutes.forEach(function (s) { aoa.push([s.name, s.job]); }); }
+      var ws = XLSX.utils.aoa_to_sheet(aoa);
+      var nm = (session.label || ('\u5834\u6b21' + (si + 1))).slice(0, 31);
+      XLSX.utils.book_append_sheet(wb, ws, nm);
+    });
+    var out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    var blob = new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    return URL.createObjectURL(blob);
+  }
+
   function makeRunner() {
     var onOk = null, onErr = null, userObj;
     var runner = {
@@ -1465,13 +1513,26 @@
     FNS.forEach(function (fn) {
       runner[fn] = function () {
         var args = Array.prototype.slice.call(arguments);
-        fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fn: fn, args: args }) })
-          .then(function (r) { return r.json(); })
-          .then(function (j) {
+        try {
+          if (fn === 'exportRoster') {
+            var url = buildRosterBlobUrl(args[0] || {});
+            if (onOk) onOk({ success: true, url: url }, userObj);
+            return runner;
+          }
+          if (fn === 'exportAttendanceAll') {
+            callServer(fn, args).then(function (j) {
+              if (j && j.ok && j.result && j.result.success) {
+                var blob = new Blob([j.result.csv], { type: 'text/csv;charset=utf-8;' });
+                if (onOk) onOk({ success: true, url: URL.createObjectURL(blob) }, userObj);
+              } else if (onErr) { onErr(new Error((j && j.error) || 'export failed'), userObj); }
+            }).catch(function (e) { if (onErr) onErr(e, userObj); });
+            return runner;
+          }
+          callServer(fn, args).then(function (j) {
             if (j && j.ok) { if (onOk) onOk(j.result, userObj); }
-            else { if (onErr) onErr(new Error((j && j.error) || 'API error'), userObj); }
-          })
-          .catch(function (e) { if (onErr) onErr(e, userObj); });
+            else if (onErr) { onErr(new Error((j && j.error) || 'API error'), userObj); }
+          }).catch(function (e) { if (onErr) onErr(e, userObj); });
+        } catch (e) { if (onErr) onErr(e, userObj); }
         return runner;
       };
     });
