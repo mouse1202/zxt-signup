@@ -1456,8 +1456,15 @@
   var API = 'https://xltdagmzsycnqbflovff.supabase.co/functions/v1/zxtapi';
   var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster'];
 
+  var JOB_COLORS = { '\u9435\u8863':'e69138','\u8840\u6cb3':'cc0000','\u795e\u76f8':'6fa8dc','\u7d20\u554f':'f4cccc','\u4e5d\u9748':'d9d2e9','\u788e\u5922':'4dd0e1','\u9f8d\u541f':'93c47d','\u7384\u6a5f':'ffe599','\u6f6e\u5149':'3c78d8' };
+  var GROUP_BANNER = { '\u5718\u4e00\u9032\u653b':{bg:'1c4587',fg:'ffffff'}, '\u5718\u4e8c\u9032\u653b':{bg:'990000',fg:'ffffff'}, '\u9632\u5b88\u5718':{bg:'f1c232',fg:'000000'} };
+  var DEF_BANNER = { bg:'434343', fg:'ffffff' };
+  function argb(h){ return 'FF' + h.toUpperCase(); }
+  function solid(bg){ return { fill:{ patternType:'solid', fgColor:{ rgb:argb(bg) } } }; }
+  function banner(bg,fg){ return { fill:{ patternType:'solid', fgColor:{ rgb:argb(bg) } }, font:{ color:{ rgb:argb(fg) }, bold:true } }; }
+
   function callServer(fn, args) {
-    return fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fn: fn, args: args }) }).then(function (r) { return r.json(); });
+    return fetch(API, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ fn:fn, args:args }) }).then(function (r) { return r.json(); });
   }
 
   function buildRosterBlobUrl(payload) {
@@ -1467,40 +1474,54 @@
       var rows = session.rows || [];
       var commanders = session.commanders || [];
       var substitutes = session.substitutes || [];
-      var cmdMap = {};
-      commanders.forEach(function (c) { cmdMap[c.group] = c.name; });
+      var cmdMap = {}; commanders.forEach(function (c) { cmdMap[c.group] = c.name; });
       var groups = [], gIdx = {};
       rows.forEach(function (row) {
-        if (!(row.group in gIdx)) { gIdx[row.group] = groups.length; groups.push({ name: row.group, teams: [], tIdx: {} }); }
+        if (!(row.group in gIdx)) { gIdx[row.group] = groups.length; groups.push({ name:row.group, teams:[], tIdx:{} }); }
         var g = groups[gIdx[row.group]];
-        if (!(row.team in g.tIdx)) { g.tIdx[row.team] = g.teams.length; g.teams.push({ name: row.team, bySlot: {}, maxSlot: 0 }); }
+        if (!(row.team in g.tIdx)) { g.tIdx[row.team] = g.teams.length; g.teams.push({ name:row.team, bySlot:{}, maxSlot:0 }); }
         var t = g.teams[g.tIdx[row.team]];
         var slot = Number(row.slot); t.bySlot[slot] = row; t.maxSlot = Math.max(t.maxSlot, slot);
       });
-      var aoa = [];
+      var aoa = [], styleOps = [], merges = [];
+      function st(r,c,s){ styleOps.push({ r:r, c:c, s:s }); }
       groups.forEach(function (group) {
-        aoa.push([group.name, '\u6307\u63ee\uff1a' + (cmdMap[group.name] || '')]);
-        var header = [];
-        group.teams.forEach(function (team) { header.push(team.name, '\u6280\u80fd'); });
-        aoa.push(header);
+        var totalCols = Math.max(1, group.teams.length * 2);
+        var cmd = cmdMap[group.name] || '';
+        var bc = GROUP_BANNER[group.name] || DEF_BANNER;
+        var br = aoa.length;
+        var b0 = [ group.name + (cmd ? ('\uff08\u6307\u63ee\uff1a' + cmd + '\uff09') : '') ];
+        while (b0.length < totalCols) b0.push('');
+        aoa.push(b0);
+        if (totalCols > 1) merges.push({ s:{ r:br, c:0 }, e:{ r:br, c:totalCols-1 } });
+        st(br, 0, banner(bc.bg, bc.fg));
+        var hr = aoa.length, hdr = [];
+        group.teams.forEach(function (team) { hdr.push(team.name, '\u6280\u80fd'); });
+        aoa.push(hdr);
+        for (var c = 0; c < totalCols; c++) st(hr, c, banner('000000','ffffff'));
         var teamSize = 0; group.teams.forEach(function (t) { teamSize = Math.max(teamSize, t.maxSlot); });
         for (var i = 1; i <= teamSize; i++) {
-          var line = [];
-          group.teams.forEach(function (team) { var p = team.bySlot[i]; line.push(p ? p.name : '', p ? p.note : ''); });
+          var r = aoa.length, line = [];
+          group.teams.forEach(function (team, ti) {
+            var p = team.bySlot[i]; var nm = p ? p.name : ''; var jb = p ? p.job : ''; var nt = p ? p.note : '';
+            line.push(nm, nt);
+            if (nm && JOB_COLORS[jb]) st(r, ti*2, solid(JOB_COLORS[jb]));
+          });
           aoa.push(line);
         }
         aoa.push([]);
       });
-      aoa.push(['\u5019\u88dc']);
+      var sr = aoa.length; aoa.push(['\u5019\u88dc']); st(sr, 0, banner('999999','ffffff'));
       if (substitutes.length === 0) { aoa.push(['\uff08\u7121\uff09']); }
-      else { substitutes.forEach(function (s) { aoa.push([s.name, s.job]); }); }
+      else { substitutes.forEach(function (s) { var r = aoa.length; aoa.push([s.name, s.job]); if (JOB_COLORS[s.job]) st(r, 0, solid(JOB_COLORS[s.job])); }); }
       var ws = XLSX.utils.aoa_to_sheet(aoa);
-      var nm = (session.label || ('\u5834\u6b21' + (si + 1))).slice(0, 31);
+      if (merges.length) ws['!merges'] = merges;
+      styleOps.forEach(function (op) { var a = XLSX.utils.encode_cell({ r:op.r, c:op.c }); if (!ws[a]) ws[a] = { t:'s', v:'' }; ws[a].s = op.s; });
+      var nm = (session.label || ('\u5834\u6b21' + (si+1))).slice(0, 31);
       XLSX.utils.book_append_sheet(wb, ws, nm);
     });
-    var out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    var blob = new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    return URL.createObjectURL(blob);
+    var out = XLSX.write(wb, { bookType:'xlsx', type:'array' });
+    return URL.createObjectURL(new Blob([out], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
   }
 
   function makeRunner() {
@@ -1516,14 +1537,14 @@
         try {
           if (fn === 'exportRoster') {
             var url = buildRosterBlobUrl(args[0] || {});
-            if (onOk) onOk({ success: true, url: url }, userObj);
+            if (onOk) onOk({ success:true, url:url }, userObj);
             return runner;
           }
           if (fn === 'exportAttendanceAll') {
             callServer(fn, args).then(function (j) {
               if (j && j.ok && j.result && j.result.success) {
-                var blob = new Blob([j.result.csv], { type: 'text/csv;charset=utf-8;' });
-                if (onOk) onOk({ success: true, url: URL.createObjectURL(blob) }, userObj);
+                var blob = new Blob([j.result.csv], { type:'text/csv;charset=utf-8;' });
+                if (onOk) onOk({ success:true, url:URL.createObjectURL(blob) }, userObj);
               } else if (onErr) { onErr(new Error((j && j.error) || 'export failed'), userObj); }
             }).catch(function (e) { if (onErr) onErr(e, userObj); });
             return runner;
@@ -1925,7 +1946,7 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
   <script>
     var JOB_OPTIONS = ['龍吟', '碎夢', '素問', '九靈', '神相', '玄機', '潮光', '鐵衣', '血河'];
 
