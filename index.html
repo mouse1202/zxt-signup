@@ -1448,6 +1448,18 @@
       opacity: 0.7;
       padding: 30px 0;
     }
+    /* ── 手機版修正（≤640px）：名單管理側邊欄、出勤標題列 ── */
+    @media (max-width: 640px) {
+      /* 名單管理：右側「職業人數」側邊欄本來固定 400px 會溢出，改成堆疊在下方、滿寬 */
+      .job-panels-row { flex-direction: column; }
+      .job-count-sidebar { flex: none; width: 100%; position: static; }
+      .job-count-panel { width: auto; }
+
+      /* 出勤系統／共用：標題列按鈕區本來不准縮會撐爆，改成可換行 */
+      .roster-header { flex-wrap: wrap; }
+      .roster-header-actions { flex-wrap: wrap; flex-shrink: 1; }
+      .roster-title { font-size: 18px; }
+    }
   </style>
 </head>
 <body>
