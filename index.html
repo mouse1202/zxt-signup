@@ -1742,7 +1742,7 @@
           <p class="attendance-empty hidden" id="attendance-trial-empty">目前沒有試訓名單。</p>
         </div>
         <div class="roster-footer">
-          <button type="button" class="roster-export-btn" id="attendance-export-btn" onclick="openPasswordGate(exportAttendanceMonthData, 'attendance-view', false)">匯出全部出勤紀錄</button>
+          <button type="button" class="roster-export-btn export-allowed-btn hidden" id="attendance-export-btn" onclick="openPasswordGate(exportAttendanceMonthData, 'attendance-view', false, 'export')">匯出出勤紀錄</button>
         </div>
       </div>
     </div>
@@ -1821,7 +1821,7 @@
           <button type="button" class="roster-back-btn" onclick="closeAccessAdminView()">返回出勤系統</button>
         </div>
         <div class="roster-body">
-          <p class="password-hint">這裡是完整的人員清冊：核准後對方才能使用網頁功能；已核准的人也能隨時點「剔除」立刻收回權限。「管理」才能輸入管理密碼使用排表工具/名單管理/審核申請等功能，「幫眾」登入後只能開出勤系統改自己的出勤狀態。</p>
+          <p class="password-hint">這裡是完整的人員清冊：核准後對方才能使用網頁功能；已核准的人也能隨時點「剔除」立刻收回權限。「管理」才能輸入總管理密碼(1102)使用排表工具/名單管理/審核申請等所有功能；「文書」比幫眾多一項：可輸入匯出密碼(0103)匯出出勤紀錄；「幫眾」登入後只能開出勤系統改自己的出勤狀態。</p>
 
           <div class="access-admin-manual-add">
             <span class="access-admin-manual-title">手動新增成員（不用經過申請流程，直接核准）</span>
@@ -1830,6 +1830,7 @@
               <input type="text" id="access-admin-new-role" class="modal-input" placeholder="角色名稱" maxlength="30" />
               <select id="access-admin-new-category" class="modal-input">
                 <option value="幫眾">幫眾</option>
+                <option value="文書">文書</option>
                 <option value="管理">管理</option>
               </select>
               <button type="button" class="access-admin-btn access-admin-btn-approve" onclick="addAccessMemberFromAdmin()">新增</button>
@@ -1969,18 +1970,24 @@
     ];
     var TEAM_ROW_GAP = 12; // px, 對應 .roster-team-row 的 gap
     var TEAM_SIZE = 6;
-    var ROSTER_PASSWORD = '0103';
+    var EXPORT_PASSWORD = '0103';   // 只解鎖「出勤匯出」（文書可用）
+    var ADMIN_PASSWORD = '1102';    // 總管理密碼：解鎖所有功能
 
-    // 目前登入者的帳號類別：'管理' / '幫眾' / null（尚未確認身分）。
-    // 只有「管理」才能通過 openPasswordGate；「幫眾」登入後只能開出勤系統改自己的出勤狀態。
+    // 目前登入者的帳號類別：'管理' / '文書' / '幫眾' / null（尚未確認身分）。
+    // 「管理」可用所有後台功能（密碼 1102）；「文書」比幫眾多一項：可匯出出勤（密碼 0103）；
+    // 「幫眾」登入後只能開出勤系統改自己的出勤狀態。
     var currentAccessCategory = null;
     var currentAccessEmail = null;
     var currentAccessRoleName = null;
 
     function applyAccessCategoryUI() {
       var isAdmin = currentAccessCategory === '管理';
+      var canExport = isAdmin || currentAccessCategory === '文書';
       Array.prototype.slice.call(document.querySelectorAll('.admin-only-btn')).forEach(function (btn) {
         btn.classList.toggle('hidden', !isAdmin);
+      });
+      Array.prototype.slice.call(document.querySelectorAll('.export-allowed-btn')).forEach(function (btn) {
+        btn.classList.toggle('hidden', !canExport);
       });
     }
 
@@ -2047,35 +2054,48 @@
     // 輸入一次正確密碼後，30 分鐘內再觸發任何密碼保護的動作都不用重新輸入。
     // 這個時間也存進 localStorage，重新整理頁面後（30 分鐘內）還是算已驗證過，
     // 不用重新輸入密碼——出勤系統的「解鎖」就是靠這個機制撐過重新整理。
-    var PASSWORD_GRACE_PERIOD_MS = 30 * 60 * 1000;
-    var PASSWORD_VERIFIED_STORAGE_KEY = 'zxt_password_verified_until';
-    var passwordVerifiedUntil = 0;
+    var FULL_GRACE_MS = 30 * 60 * 1000;    // 1102 總管理：30 分鐘免密
+    var EXPORT_GRACE_MS = 10 * 60 * 1000;  // 0103 匯出：10 分鐘免密
+    var FULL_VERIFIED_KEY = 'zxt_password_verified_until';
+    var EXPORT_VERIFIED_KEY = 'zxt_export_verified_until';
+    var fullVerifiedUntil = 0;
+    var exportVerifiedUntil = 0;
     try {
-      var storedVerifiedUntil = parseInt(window.localStorage.getItem(PASSWORD_VERIFIED_STORAGE_KEY) || '0', 10);
-      if (storedVerifiedUntil > Date.now()) passwordVerifiedUntil = storedVerifiedUntil;
+      var sf = parseInt(window.localStorage.getItem(FULL_VERIFIED_KEY) || '0', 10);
+      if (sf > Date.now()) fullVerifiedUntil = sf;
+      var se = parseInt(window.localStorage.getItem(EXPORT_VERIFIED_KEY) || '0', 10);
+      if (se > Date.now()) exportVerifiedUntil = se;
     } catch (e) { /* 無痕模式等情況忽略 */ }
 
-    function openPasswordGate(onSuccessFn, cancelView, wide) {
+    function openPasswordGate(onSuccessFn, cancelView, wide, level) {
+      level = level || 'admin';
       if (PASSWORD_GATE_DISABLED) {
         onSuccessFn();
         return;
       }
 
-      // 「幫眾」類別的帳號一律不能使用密碼保護的功能，就算知道密碼也一樣——
-      // 要能輸入管理密碼做事，帳號類別要先在「審核申請」後台被設成「管理」。
-      if (currentAccessCategory !== '管理') {
-        showAlertModal('只有「管理」身份才能使用這個功能，請聯繫管理員把你的帳號類別調整為「管理」。');
-        return;
+      // 類別檢查：'export' 級（出勤匯出）允許「文書」或「管理」；'admin' 級（其他後台）只允許「管理」。
+      if (level === 'export') {
+        if (currentAccessCategory !== '管理' && currentAccessCategory !== '文書') {
+          showAlertModal('只有「文書」或「管理」身份才能匯出出勤，請聯繫管理員調整你的帳號類別。');
+          return;
+        }
+      } else {
+        if (currentAccessCategory !== '管理') {
+          showAlertModal('只有「管理」身份才能使用這個功能，請聯繫管理員把你的帳號類別調整為「管理」。');
+          return;
+        }
       }
 
-      if (Date.now() < passwordVerifiedUntil) {
-        onSuccessFn();
-        return;
-      }
+      // 免密期：總管理(1102)通過任何級別；匯出(0103)只通過 export 級別。
+      var nowTs = Date.now();
+      if (nowTs < fullVerifiedUntil) { onSuccessFn(); return; }
+      if (level === 'export' && nowTs < exportVerifiedUntil) { onSuccessFn(); return; }
 
       passwordContext.onSuccess = onSuccessFn;
       passwordContext.cancelView = cancelView;
       passwordContext.cancelWide = !!VIEW_WIDE[cancelView];
+      passwordContext.level = level;
       showView('password-view', !!wide);
       document.getElementById('password-error').classList.add('hidden');
       var input = document.getElementById('password-input');
@@ -2089,10 +2109,22 @@
 
     function checkRosterPassword() {
       var input = document.getElementById('password-input');
-      if (input.value === ROSTER_PASSWORD) {
+      var val = input.value;
+      var level = passwordContext.level || 'admin';
+      var ok = false;
+      if (val === ADMIN_PASSWORD) {
+        // 總管理密碼：解鎖所有功能 30 分鐘（任何級別都算通過）
+        fullVerifiedUntil = Date.now() + FULL_GRACE_MS;
+        try { window.localStorage.setItem(FULL_VERIFIED_KEY, String(fullVerifiedUntil)); } catch (e) { /* 忽略 */ }
+        ok = true;
+      } else if (val === EXPORT_PASSWORD && level === 'export') {
+        // 匯出密碼：只在 export 級別有效，只解鎖匯出 10 分鐘，不能用於其他後台
+        exportVerifiedUntil = Date.now() + EXPORT_GRACE_MS;
+        try { window.localStorage.setItem(EXPORT_VERIFIED_KEY, String(exportVerifiedUntil)); } catch (e) { /* 忽略 */ }
+        ok = true;
+      }
+      if (ok) {
         document.getElementById('password-error').classList.add('hidden');
-        passwordVerifiedUntil = Date.now() + PASSWORD_GRACE_PERIOD_MS;
-        try { window.localStorage.setItem(PASSWORD_VERIFIED_STORAGE_KEY, String(passwordVerifiedUntil)); } catch (e) { /* 無痕模式等情況忽略 */ }
         if (passwordContext.onSuccess) passwordContext.onSuccess();
       } else {
         document.getElementById('password-error').classList.remove('hidden');
@@ -3194,11 +3226,11 @@
     function isAttendanceLockedNow() {
       var today = todayStr();
 
-      // attendanceUnlocked：本機預覽模式的假解鎖。passwordVerifiedUntil：這台裝置這次密碼
-      // 驗證的 30 分鐘寬限期（存在 localStorage，只對「這台裝置」有效）。
-      // attendanceTempUnlockUntil：管理員按「解鎖」時寫回後端的到期時間，是「這個真實日期」
-      // 全部裝置、全部人共用的解鎖狀態，不會因為換一台手機/電腦而看到不一樣的鎖定畫面。
-      if (attendanceUnlocked || Date.now() < passwordVerifiedUntil) return false;
+      // attendanceUnlocked：本機預覽模式的假解鎖。fullVerifiedUntil：這台裝置這次輸入總管理
+      // 密碼(1102)的 30 分鐘寬限期（存在 localStorage，只對「這台裝置」有效）。匯出密碼(0103)
+      // 不算，不會解鎖出勤編輯。attendanceTempUnlockUntil：管理員按「解鎖」時寫回後端的到期時間，
+      // 是「這個真實日期」全部裝置、全部人共用的解鎖狀態。
+      if (attendanceUnlocked || Date.now() < fullVerifiedUntil) return false;
       if (attendanceTempUnlockUntil[today] && Date.now() < attendanceTempUnlockUntil[today]) return false;
 
       var deadline = attendanceDeadlines[today];
@@ -3903,6 +3935,7 @@
             ? '<span>管理</span>'
             : '<select class="access-admin-category-select" onchange="setAccessRequestCategoryFromAdmin(\'' + safeEmail + '\', this.value)">' +
               '<option value="幫眾"' + (r.category === '幫眾' ? ' selected' : '') + '>幫眾</option>' +
+              '<option value="文書"' + (r.category === '文書' ? ' selected' : '') + '>文書</option>' +
               '<option value="管理"' + (r.category === '管理' ? ' selected' : '') + '>管理</option>' +
               '</select>';
 
