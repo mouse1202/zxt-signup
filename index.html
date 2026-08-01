@@ -1634,6 +1634,7 @@
               <button type="button" class="roster-session-tab" data-session="2" onclick="onRosterSessionChange('2')">第二場</button>
             </div>
             <button type="button" class="roster-back-btn hidden" id="roster-copy-session1-btn" onclick="copyFromFirstSession()">複製第一場</button>
+            <button type="button" class="roster-back-btn" id="roster-copy-other-btn" onclick="openCopyRosterConfigDialog()">複製其他天配置</button>
           </div>
           <div class="attendance-date-row">
             <span class="attendance-summary" id="roster-date-hint">姓名下拉選單只列出當天出勤系統標記「出勤」的人</span>
@@ -2559,6 +2560,75 @@
       } else {
         showAlertModal('本機預覽模式，未連接 Google Apps Script，無法複製');
       }
+    }
+
+    // 「複製其他天配置」：讓使用者選一個既有日期，把【那天‧目前這一場次】已存的排表配置
+    // （各格職業/姓名/備註 + 各團指揮）複製到目前這天這一場，複製後立即存檔覆蓋。
+    // 隊伍/格子的結構是固定的，所以能複製的就是「誰排在哪一格 + 指揮」這份配置。
+    function openCopyRosterConfigDialog() {
+      var currentDate = getSharedDate();
+      var srcSelect = document.getElementById('roster-date');
+      var labels = Array.prototype.slice.call(srcSelect.options)
+        .map(function (o) { return o.value; })
+        .filter(function (v) { return v && v !== currentDate && v !== NEW_DATE_LABEL_VALUE; });
+      if (labels.length === 0) { showAlertModal('目前沒有其他日期可以複製'); return; }
+
+      var sessionText = (currentRosterSession === '2') ? '第二場' : '第一場';
+      var optionsHtml = labels.map(function (v) {
+        var safe = v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+        return '<option value="' + safe + '">' + safe + '</option>';
+      }).join('');
+
+      var overlay = document.createElement('div');
+      overlay.className = 'modal-overlay';
+      overlay.innerHTML =
+        '<div class="modal-box">' +
+          '<div class="modal-title">複製其他天配置</div>' +
+          '<div class="modal-hint">選一個日期，把該天「' + sessionText + '」的排表配置（職業／姓名／備註＋指揮）複製到目前這天這一場。複製後會立即存檔、覆蓋目前內容。</div>' +
+          '<select class="modal-input" id="copy-roster-source">' + optionsHtml + '</select>' +
+          '<div class="modal-actions">' +
+            '<button type="button" class="modal-btn modal-btn-cancel">取消</button>' +
+            '<button type="button" class="modal-btn modal-btn-confirm">複製</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(overlay);
+
+      function close() { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }
+      overlay.querySelector('.modal-btn-cancel').onclick = close;
+      overlay.onclick = function (e) { if (e.target === overlay) close(); };
+      overlay.querySelector('.modal-btn-confirm').onclick = function () {
+        var srcDate = document.getElementById('copy-roster-source').value;
+        close();
+        doCopyRosterConfig(srcDate);
+      };
+    }
+
+    function doCopyRosterConfig(srcDate) {
+      if (!(window.google && google.script && google.script.run)) {
+        showAlertModal('本機預覽模式，未連接後端，無法複製');
+        return;
+      }
+      var session = currentRosterSession;
+      var result = { rows: [], commanders: [] };
+      var pending = 2;
+      var failed = false;
+      function done() {
+        if (failed) return;
+        pending--;
+        if (pending > 0) return;
+        var hasAny = (result.rows || []).some(function (r) { return r.name || r.job || r.note; });
+        if (!hasAny) { showAlertModal('「' + srcDate + '」的這一場沒有排表資料可以複製'); return; }
+        applyRosterResultToForm(result, '已複製「' + srcDate + '」的配置，改動會自動存檔');
+        saveRosterData(); // 複製後立即存檔，變成目前這天這場自己的資料
+      }
+      google.script.run
+        .withSuccessHandler(function (rows) { result.rows = rows || []; done(); })
+        .withFailureHandler(function (err) { if (!failed) { failed = true; showAlertModal('複製失敗：' + err.message); } })
+        .getRosterByDate(srcDate, session);
+      google.script.run
+        .withSuccessHandler(function (cmd) { result.commanders = cmd || []; done(); })
+        .withFailureHandler(function () { result.commanders = []; done(); })
+        .getCommandersByDate(srcDate, session);
     }
 
     // 排表工具的日期選單沒有「＋ 新增日期／場次」選項（只能選出勤系統新增過的日期），
