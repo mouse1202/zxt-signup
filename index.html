@@ -1460,13 +1460,30 @@
       .roster-header-actions { flex-wrap: wrap; flex-shrink: 1; }
       .roster-title { font-size: 18px; }
     }
+
+    /* ── 約戰公告：出勤系統右側的獨立側邊視窗 ── */
+    .container.attendance-wide { max-width: 1096px; }
+    .attendance-layout-row { display: flex; gap: 16px; align-items: flex-start; width: 100%; }
+    .attendance-layout-row > .roster-section { flex: 1; min-width: 0; }
+    .announce-sidebar { flex: 0 0 340px; width: 340px; position: sticky; top: 12px; }
+    .announce-display { white-space: pre-wrap; word-break: break-word; color: #f5e8c0; font-size: 15px; line-height: 1.7; min-height: 48px; }
+    .announce-display.announce-empty { color: #8a7440; font-style: italic; }
+    .announce-edit { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; border-top: 1px solid rgba(212, 168, 40, 0.3); padding-top: 12px; }
+    .announce-input { width: 100%; min-height: 120px; background: #0A0A0A; border: 1px solid #6B1023; color: #FFFFEF; border-radius: 6px; padding: 8px 10px; font-size: 14px; font-family: inherit; resize: vertical; }
+    .announce-input:focus { outline: none; border-color: #f0d060; }
+
+    /* 手機／窄螢幕：約戰公告移到下方、滿寬，不壓縮出勤主畫面 */
+    @media (max-width: 900px) {
+      .attendance-layout-row { flex-direction: column; }
+      .announce-sidebar { flex: none; width: 100%; position: static; }
+    }
   </style>
 </head>
 <body>
 <script>
 (function () {
   var API = 'https://xltdagmzsycnqbflovff.supabase.co/functions/v1/zxtapi';
-  var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster'];
+  var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster','getAnnouncement','saveAnnouncement'];
 
   var JOB_COLORS = { '鐵衣':'e69138','血河':'cc0000','神相':'6fa8dc','素問':'f4cccc','九靈':'d9d2e9','碎夢':'4dd0e1','龍吟':'93c47d','玄機':'ffe599','潮光':'3c78d8' };
   var GROUP_BANNER = { '團一進攻':{bg:'1c4587',fg:'ffffff'}, '團二進攻':{bg:'990000',fg:'ffffff'}, '防守團':{bg:'f1c232',fg:'000000'} };
@@ -1667,6 +1684,7 @@
 
     <!-- Attendance view -->
     <div class="view hidden" id="attendance-view">
+      <div class="attendance-layout-row">
       <div class="roster-section">
         <div class="roster-header">
           <span class="roster-title">出勤系統</span>
@@ -1746,6 +1764,19 @@
         <div class="roster-footer">
           <button type="button" class="roster-export-btn export-allowed-btn hidden" id="attendance-export-btn" onclick="openPasswordGate(exportAttendanceMonthData, 'attendance-view', false, 'export')">匯出出勤紀錄</button>
         </div>
+      </div>
+      <aside class="announce-sidebar">
+        <div class="roster-section">
+          <div class="roster-header"><span class="roster-title">約戰公告</span></div>
+          <div class="roster-body">
+            <div id="announce-display" class="announce-display announce-empty">目前沒有公告</div>
+            <div class="announce-edit admin-only-btn">
+              <textarea id="announce-input" class="announce-input" maxlength="2000" placeholder="輸入約戰公告…（只有管理看得到這個編輯框）"></textarea>
+              <button type="button" class="roster-save-btn" onclick="saveAnnouncementText()">儲存公告</button>
+            </div>
+          </div>
+        </div>
+      </aside>
       </div>
     </div>
 
@@ -2029,6 +2060,8 @@
         // 名單管理右側額外的職業人數側邊欄需要獨立的寬度設定，跟排表工具那組
         // wide/wideOverride 沒有關係，只在真的顯示名單管理本身時才加上去。
         document.querySelector('.container').classList.toggle('member-wide', id === 'member-view');
+        // 出勤系統右側多一個「約戰公告」側邊視窗，需要額外寬度（跟名單管理同寬）
+        document.querySelector('.container').classList.toggle('attendance-wide', id === 'attendance-view');
         // 出勤系統／排表工具開啟時，底圖霧化一下，避免顏色太鮮豔搶過面板內容
         document.body.classList.toggle('bg-frosted', id === 'roster-view' || id === 'attendance-view');
 
@@ -3668,7 +3701,48 @@
         loadAttendanceFromMembers();
       });
       refreshAttendanceLockForToday();
+      loadAnnouncement();
       showView('attendance-view');
+    }
+
+    // 約戰公告：所有人都看得到內容；只有「管理」看得到編輯框（.admin-only-btn 由 applyAccessCategoryUI 控制顯示）。
+    function renderAnnouncement(text) {
+      var disp = document.getElementById('announce-display');
+      var input = document.getElementById('announce-input');
+      text = text || '';
+      if (text.trim() === '') {
+        disp.textContent = '目前沒有公告';
+        disp.classList.add('announce-empty');
+      } else {
+        disp.textContent = text;
+        disp.classList.remove('announce-empty');
+      }
+      if (input) input.value = text;
+    }
+
+    function loadAnnouncement() {
+      if (window.google && google.script && google.script.run) {
+        google.script.run.withSuccessHandler(function (res) {
+          renderAnnouncement((res && res.text) || '');
+        }).withFailureHandler(function (err) {
+          console.log('讀取公告失敗：' + err.message);
+        }).getAnnouncement();
+      }
+    }
+
+    function saveAnnouncementText() {
+      var input = document.getElementById('announce-input');
+      var text = input ? input.value : '';
+      if (window.google && google.script && google.script.run) {
+        google.script.run.withSuccessHandler(function () {
+          renderAnnouncement(text);
+          showAlertModal('公告已更新');
+        }).withFailureHandler(function (err) {
+          showAlertModal('儲存公告失敗：' + err.message);
+        }).saveAnnouncement(text);
+      } else {
+        renderAnnouncement(text);
+      }
     }
 
     // 刪除目前選定日期/場次標籤的所有資料：出勤記錄、以及所有場次的排表資料。
