@@ -363,6 +363,9 @@
     .roster-content-row > .roster-list {
       flex: none;
       width: calc(100% - 332px);
+      /* 中間排表獨立捲動：兩側窗格（sticky）固定不動，只有這塊在捲 */
+      max-height: calc(100vh - 200px);
+      overflow-y: auto;
     }
 
     /* 候補／外援／試訓窗格用的側邊欄容器，左右各一個 */
@@ -438,6 +441,8 @@
       .roster-content-row > .roster-list {
         width: 100%;
         order: 1;
+        max-height: none;
+        overflow-y: visible;
       }
 
       .roster-sidebar {
@@ -1658,6 +1663,10 @@
           </div>
           <div class="roster-content-row">
             <div class="roster-sidebar">
+              <div class="roster-substitutes-panel">
+                <div class="roster-substitutes-title">請假<span id="roster-leave-count"></span></div>
+                <div class="roster-substitutes-list" id="roster-leave-list"></div>
+              </div>
               <div class="roster-substitutes-panel roster-substitutes-panel-tall">
                 <div class="roster-substitutes-title">外援<span id="roster-guest-substitutes-count"></span></div>
                 <div class="roster-substitutes-list" id="roster-guest-substitutes-list"></div>
@@ -1665,10 +1674,6 @@
               <div class="roster-substitutes-panel roster-substitutes-panel-tall">
                 <div class="roster-substitutes-title">試訓<span id="roster-trial-substitutes-count"></span></div>
                 <div class="roster-substitutes-list" id="roster-trial-substitutes-list"></div>
-              </div>
-              <div class="roster-substitutes-panel">
-                <div class="roster-substitutes-title">請假<span id="roster-leave-count"></span></div>
-                <div class="roster-substitutes-list" id="roster-leave-list"></div>
               </div>
             </div>
             <div class="roster-list" id="roster-list"></div>
