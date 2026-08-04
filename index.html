@@ -2514,8 +2514,9 @@
     function loadRosterLeaveList(date) {
       function render(records) {
         var leave = (records || [])
-          .filter(function (r) { return r.status && r.status !== '出勤'; })
-          .map(function (r) { return { name: r.name, job: r.status }; });
+          .filter(function (r) { return r.status && r.status !== '出勤'; }) // 請假＋臨時請假都算請假，不分
+          .map(function (r) { return { name: r.name, job: r.job }; })        // 名字後面顯示職業
+          .sort(compareByJob_);                                              // 按職業順序排序
         renderRosterSubstituteList('roster-leave-list', 'roster-leave-count', leave, '目前沒有人請假');
       }
       if (window.google && google.script && google.script.run) {
