@@ -1666,6 +1666,10 @@
                 <div class="roster-substitutes-title">試訓<span id="roster-trial-substitutes-count"></span></div>
                 <div class="roster-substitutes-list" id="roster-trial-substitutes-list"></div>
               </div>
+              <div class="roster-substitutes-panel">
+                <div class="roster-substitutes-title">請假<span id="roster-leave-count"></span></div>
+                <div class="roster-substitutes-list" id="roster-leave-list"></div>
+              </div>
             </div>
             <div class="roster-list" id="roster-list"></div>
             <div class="roster-sidebar">
@@ -2488,6 +2492,8 @@
         if (callback) callback();
       }
 
+      loadRosterLeaveList(date); // 同時載入「當天請假名單」到左側請假面板
+
       if (window.google && google.script && google.script.run) {
         google.script.run.withSuccessHandler(applyAttendees).withFailureHandler(function (err) {
           console.log('讀取出勤名單失敗：' + err.message);
@@ -2495,6 +2501,22 @@
         }).getRosterAttendeesForDate(date);
       } else {
         applyAttendees([]);
+      }
+    }
+
+    // 排表工具左側「請假」面板：顯示當天出勤系統標記為「請假／臨時請假」的人（右側小字顯示是哪一種）。
+    // 這份是純顯示、不會被排表指派影響，所以只在切換日期／開啟排表時載入。
+    function loadRosterLeaveList(date) {
+      function render(records) {
+        var leave = (records || [])
+          .filter(function (r) { return r.status && r.status !== '出勤'; })
+          .map(function (r) { return { name: r.name, job: r.status }; });
+        renderRosterSubstituteList('roster-leave-list', 'roster-leave-count', leave, '目前沒有人請假');
+      }
+      if (window.google && google.script && google.script.run) {
+        google.script.run.withSuccessHandler(render).withFailureHandler(function () { render([]); }).getAttendanceByDate(date);
+      } else {
+        render([]);
       }
     }
 
