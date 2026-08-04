@@ -1687,7 +1687,7 @@
             <button type="button" class="roster-back-btn admin-only-btn" onclick="openPasswordGate(openAttendanceDeadlineControl, 'attendance-view', false)">設定調整截止時間</button>
           </div>
           <div class="attendance-date-row hidden" id="attendance-deadline-row">
-            <label for="attendance-deadline-date-input" class="attendance-date-label">適用日期：</label>
+            <label for="attendance-deadline-date-input" class="attendance-date-label">截止日期：</label>
             <input type="date" id="attendance-deadline-date-input" class="attendance-date-input" onchange="loadDeadlineForSelectedRealDate()" />
             <label for="attendance-deadline-input" class="attendance-date-label">截止時間：</label>
             <input type="time" id="attendance-deadline-input" class="attendance-date-input" />
@@ -3286,31 +3286,28 @@
       });
     }
 
-    // 出勤調整截止時間：綁定「真正的日曆日期」，跟上面自由輸入的日期/場次標籤是分開的兩件事——
-    // 標籤是給出勤/排表用的識別文字，截止時間永遠是拿「今天的真實日期」去比對，
-    // 不管標籤打了什麼都不受影響。過了截止時間一般人就不能再改，
-    // 輸入過一次正確的管理密碼後，這次瀏覽就都可以繼續編輯。
-    var attendanceDeadlines = {}; // 真實日期 yyyy-MM-dd -> 'HH:MM'（快取，避免每次都重新讀取後端）
+    // 出勤調整截止時間：綁定「日期/場次標籤」本身，每個標籤各自獨立（不是綁真實日曆日期）。
+    // 每個標籤存一個「完整截止時刻」(yyyy-MM-ddTHH:MM)；只有在「目前正在看這個標籤」且已過該時刻時才鎖，
+    // 其他標籤完全不受影響。輸入總管理密碼(1102)或按解鎖後可繼續編輯。
+    var attendanceDeadlines = {}; // 標籤 -> 完整截止時刻字串 'yyyy-MM-ddTHH:MM'（快取）
     var attendanceUnlocked = false; // 本機預覽（無後端）時的解鎖旗標，純前端、僅限本機測試用
-    var attendanceTempUnlockUntil = {}; // 真實日期 yyyy-MM-dd -> 到期時間戳記（毫秒，來自後端，所有裝置/所有人共用）
+    var attendanceTempUnlockUntil = {}; // 標籤 -> 臨時解鎖到期時間戳記（毫秒，後端共用）
 
     function isAttendanceLockedNow() {
-      var today = todayStr();
-
-      // attendanceUnlocked：本機預覽模式的假解鎖。fullVerifiedUntil：這台裝置這次輸入總管理
-      // 密碼(1102)的 30 分鐘寬限期（存在 localStorage，只對「這台裝置」有效）。匯出密碼(0103)
-      // 不算，不會解鎖出勤編輯。attendanceTempUnlockUntil：管理員按「解鎖」時寫回後端的到期時間，
-      // 是「這個真實日期」全部裝置、全部人共用的解鎖狀態。
+      // attendanceUnlocked：本機預覽假解鎖。fullVerifiedUntil：本機輸入總管理密碼(1102)的 30 分寬限。
       if (attendanceUnlocked || Date.now() < fullVerifiedUntil) return false;
-      if (attendanceTempUnlockUntil[today] && Date.now() < attendanceTempUnlockUntil[today]) return false;
 
-      var deadline = attendanceDeadlines[today];
-      if (!deadline) return false;
+      var label = getSharedDate(); // 只針對「目前正在看的這個標籤」判斷
+      if (!label) return false;
+      if (attendanceTempUnlockUntil[label] && Date.now() < attendanceTempUnlockUntil[label]) return false;
 
-      var deadlineMoment = new Date(today + 'T' + deadline + ':00');
-      if (isNaN(deadlineMoment.getTime())) return false;
+      var cutoff = attendanceDeadlines[label]; // 完整截止時刻 'yyyy-MM-ddTHH:MM'
+      if (!cutoff) return false;
 
-      return new Date().getTime() >= deadlineMoment.getTime();
+      var m = new Date(cutoff);
+      if (isNaN(m.getTime())) return false;
+
+      return Date.now() >= m.getTime();
     }
 
     function applyAttendanceLockState() {
@@ -3320,65 +3317,51 @@
 
       var lockRow = document.getElementById('attendance-lock-row');
       if (locked) {
+        var label = getSharedDate();
+        var cutoff = (attendanceDeadlines[label] || '').replace('T', ' ');
         document.getElementById('attendance-lock-msg').textContent =
-          '已超過今天的調整時間（' + attendanceDeadlines[todayStr()] + '），如需修改請輸入管理密碼解鎖';
+          '「' + label + '」已超過調整截止時間（' + cutoff + '），如需修改請輸入管理密碼解鎖';
         lockRow.classList.remove('hidden');
       } else {
         lockRow.classList.add('hidden');
       }
     }
 
-    // 每次打開出勤系統都重新讀一次「今天」的截止時間設定跟共用解鎖狀態，確保鎖定狀態是最新的
+    // 讀取「目前這個標籤」的截止時刻與共用解鎖狀態，確保鎖定狀態是最新的（開啟出勤系統／切換標籤時呼叫）
     function refreshAttendanceLockForToday() {
-      var today = todayStr();
+      var label = getSharedDate();
 
-      function applyDeadline(deadline) {
-        attendanceDeadlines[today] = deadline || '';
+      function applyDeadline(cutoff) {
+        attendanceDeadlines[label] = cutoff || '';
         applyAttendanceLockState();
       }
 
       function applyUnlockUntil(until) {
-        attendanceTempUnlockUntil[today] = until || 0;
+        attendanceTempUnlockUntil[label] = until || 0;
         applyAttendanceLockState();
       }
+
+      if (!label) { applyAttendanceLockState(); return; }
 
       if (window.google && google.script && google.script.run) {
         google.script.run.withSuccessHandler(applyDeadline).withFailureHandler(function (err) {
           console.log('讀取出勤截止時間失敗：' + err.message);
           applyDeadline('');
-        }).getAttendanceDeadline(today);
+        }).getAttendanceDeadline(label);
 
         google.script.run.withSuccessHandler(applyUnlockUntil).withFailureHandler(function (err) {
           console.log('讀取解鎖狀態失敗：' + err.message);
           applyUnlockUntil(0);
-        }).getAttendanceTempUnlockUntil(today);
+        }).getAttendanceTempUnlockUntil(label);
       } else {
         applyDeadline('');
         applyUnlockUntil(0);
       }
     }
 
-    // 管理員在「設定調整截止時間」面板裡選日期時，把那天已經設定的時間帶出來
-    function loadDeadlineForSelectedRealDate() {
-      var realDate = document.getElementById('attendance-deadline-date-input').value;
-      var timeInput = document.getElementById('attendance-deadline-input');
-
-      if (attendanceDeadlines.hasOwnProperty(realDate)) {
-        timeInput.value = attendanceDeadlines[realDate];
-        return;
-      }
-
-      if (window.google && google.script && google.script.run) {
-        google.script.run.withSuccessHandler(function (deadline) {
-          attendanceDeadlines[realDate] = deadline || '';
-          timeInput.value = deadline || '';
-        }).withFailureHandler(function (err) {
-          console.log('讀取出勤截止時間失敗：' + err.message);
-        }).getAttendanceDeadline(realDate);
-      } else {
-        timeInput.value = '';
-      }
-    }
+    // 方案 A 後：截止時間綁「日期/場次標籤」而非真實日期，這個日期欄只是截止時刻的「日期部分」，
+    // 不再是「選哪天的截止時間來編輯」，所以 onchange 不用做事（保留空函式避免 HTML onchange 報錯）。
+    function loadDeadlineForSelectedRealDate() { /* no-op（截止時間改綁標籤） */ }
 
     // 日期/場次標籤是自由文字（例如「0804」「0726 bo2」），不是真正的日曆日期，
     // 沒辦法直接拿來當「適用日期」欄位（那個是真正的 <input type="date">）。
@@ -3410,33 +3393,52 @@
 
     function openAttendanceDeadlineControl() {
       showView('attendance-view');
+      var label = getSharedDate();
       var dateInput = document.getElementById('attendance-deadline-date-input');
-      if (!dateInput.value) {
-        var currentLabel = document.getElementById('attendance-date').value;
-        dateInput.value = guessRealDateFromLabel_(currentLabel) || todayStr();
+      var timeInput = document.getElementById('attendance-deadline-input');
+
+      function fill(cutoff) {
+        cutoff = cutoff || '';
+        if (cutoff.indexOf('T') !== -1) {
+          var parts = cutoff.split('T');
+          dateInput.value = parts[0];
+          timeInput.value = parts[1] || '';
+        } else {
+          // 沒設過、或相容舊資料（只有 HH:MM）：日期用標籤推算或今天，時間沿用舊值
+          dateInput.value = guessRealDateFromLabel_(label) || todayStr();
+          timeInput.value = cutoff;
+        }
+        document.getElementById('attendance-deadline-row').classList.remove('hidden');
       }
-      loadDeadlineForSelectedRealDate();
-      document.getElementById('attendance-deadline-row').classList.remove('hidden');
+
+      if (attendanceDeadlines.hasOwnProperty(label)) {
+        fill(attendanceDeadlines[label]);
+      } else if (window.google && google.script && google.script.run) {
+        google.script.run.withSuccessHandler(function (cutoff) {
+          attendanceDeadlines[label] = cutoff || '';
+          fill(cutoff);
+        }).withFailureHandler(function () { fill(''); }).getAttendanceDeadline(label);
+      } else {
+        fill('');
+      }
     }
 
     function saveAttendanceDeadlineForDate() {
-      var realDate = document.getElementById('attendance-deadline-date-input').value;
+      var label = getSharedDate();
+      var date = document.getElementById('attendance-deadline-date-input').value;
       var time = document.getElementById('attendance-deadline-input').value;
 
-      if (!realDate) {
-        showAlertModal('請選擇適用日期');
-        return;
-      }
-      if (!time) {
-        showAlertModal('請選擇一個時間');
-        return;
-      }
+      if (!label) { showAlertModal('請先選擇一個日期/場次'); return; }
+      if (!date) { showAlertModal('請選擇截止日期'); return; }
+      if (!time) { showAlertModal('請選擇截止時間'); return; }
+
+      var cutoff = date + 'T' + time; // 完整截止時刻，綁在這個標籤上
 
       function onSuccess() {
-        attendanceDeadlines[realDate] = time;
+        attendanceDeadlines[label] = cutoff;
         document.getElementById('attendance-deadline-row').classList.add('hidden');
         applyAttendanceLockState();
-        showAlertModal('已設定 ' + realDate + ' 的調整截止時間為 ' + time);
+        showAlertModal('已設定「' + label + '」的調整截止時間為 ' + date + ' ' + time + '（只鎖這個日期/場次）');
       }
 
       function onFailure(err) {
@@ -3444,21 +3446,21 @@
       }
 
       if (window.google && google.script && google.script.run) {
-        google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFailure).saveAttendanceDeadlineTime(realDate, time);
+        google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFailure).saveAttendanceDeadlineTime(label, cutoff);
       } else {
-        console.log('local preview: 未連接 Google Apps Script，截止時間未送出', realDate, time);
+        console.log('local preview: 未連接後端，截止時間未送出', label, cutoff);
         onSuccess();
       }
     }
 
     function clearAttendanceDeadlineForDate() {
-      var realDate = document.getElementById('attendance-deadline-date-input').value;
+      var label = getSharedDate();
 
       function onSuccess() {
-        attendanceDeadlines[realDate] = '';
+        attendanceDeadlines[label] = '';
         document.getElementById('attendance-deadline-row').classList.add('hidden');
         applyAttendanceLockState();
-        showAlertModal('已取消 ' + realDate + ' 的調整時間限制');
+        showAlertModal('已取消「' + label + '」的調整時間限制');
       }
 
       function onFailure(err) {
@@ -3466,24 +3468,24 @@
       }
 
       if (window.google && google.script && google.script.run) {
-        google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFailure).clearAttendanceDeadlineTime(realDate);
+        google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFailure).clearAttendanceDeadlineTime(label);
       } else {
-        console.log('local preview: 未連接 Google Apps Script，取消截止時間未送出', realDate);
+        console.log('local preview: 未連接後端，取消截止時間未送出', label);
         onSuccess();
       }
     }
 
     function unlockAttendanceEditing() {
       showView('attendance-view');
-      var today = todayStr();
+      var label = getSharedDate();
 
       if (window.google && google.script && google.script.run) {
         google.script.run.withSuccessHandler(function (res) {
-          attendanceTempUnlockUntil[today] = res.until;
+          attendanceTempUnlockUntil[label] = res.until;
           applyAttendanceLockState();
         }).withFailureHandler(function (err) {
           showAlertModal('解鎖失敗：' + err.message);
-        }).setAttendanceTempUnlock(today, 30);
+        }).setAttendanceTempUnlock(label, 30);
       } else {
         attendanceUnlocked = true;
         applyAttendanceLockState();
@@ -3581,6 +3583,7 @@
         setSharedDate(select.value);
         applyAttendanceStatusesForDate(getSharedDate());
         document.getElementById('attendance-deadline-row').classList.add('hidden');
+        refreshAttendanceLockForToday(); // 換標籤要重新載入「這個標籤」的截止時刻/解鎖狀態
       });
     }
 
