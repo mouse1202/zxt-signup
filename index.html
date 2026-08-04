@@ -1770,7 +1770,7 @@
           <div class="roster-header"><span class="roster-title">約戰公告</span></div>
           <div class="roster-body">
             <div id="announce-display" class="announce-display announce-empty">目前沒有公告</div>
-            <div class="announce-edit admin-only-btn">
+            <div class="announce-edit clerk-admin-btn">
               <textarea id="announce-input" class="announce-input" maxlength="2000" placeholder="輸入約戰公告…（只有管理看得到這個編輯框）"></textarea>
               <button type="button" class="roster-save-btn" onclick="saveAnnouncementText()">儲存公告</button>
             </div>
@@ -2019,7 +2019,8 @@
       Array.prototype.slice.call(document.querySelectorAll('.admin-only-btn')).forEach(function (btn) {
         btn.classList.toggle('hidden', !isAdmin);
       });
-      Array.prototype.slice.call(document.querySelectorAll('.export-allowed-btn')).forEach(function (btn) {
+      // 文書＋管理都可用：匯出出勤（.export-allowed-btn）、修改約戰公告（.clerk-admin-btn）
+      Array.prototype.slice.call(document.querySelectorAll('.export-allowed-btn, .clerk-admin-btn')).forEach(function (btn) {
         btn.classList.toggle('hidden', !canExport);
       });
     }
