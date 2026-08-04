@@ -3811,7 +3811,7 @@
         }
 
         if (window.google && google.script && google.script.run) {
-          google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFailure).deleteAllRecordsForDate(date);
+          google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFailure).deleteAllRecordsForDate(date, currentAccessEmail, currentAccessRoleName);
         } else {
           console.log('local preview: 未連接 Google Apps Script，刪除動作未送出', date);
           onSuccess();
