@@ -3380,6 +3380,22 @@
     var attendanceUnlocked = false; // 本機預覽（無後端）時的解鎖旗標，純前端、僅限本機測試用
     var attendanceTempUnlockUntil = {}; // 標籤 -> 臨時解鎖到期時間戳記（毫秒，後端共用）
 
+    // 自動截止：表單名稱前 4 碼(MMDD)推算活動日，鎖在「活動前一天 23:59」；推不出來回空字串。
+    function autoDeadlineForLabel(label) {
+      var eventDate = guessRealDateFromLabel_(label); // 'yyyy-MM-dd' 或 ''
+      if (!eventDate) return '';
+      var d = new Date(eventDate + 'T00:00');
+      if (isNaN(d.getTime())) return '';
+      d.setDate(d.getDate() - 1); // 前一天
+      function p(n) { return String(n).padStart(2, '0'); }
+      return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T23:59';
+    }
+
+    // 這個標籤實際生效的截止時刻：有手動設就用手動（覆蓋），沒有就退回自動規則。
+    function effectiveDeadline(label) {
+      return attendanceDeadlines[label] || autoDeadlineForLabel(label) || '';
+    }
+
     function isAttendanceLockedNow() {
       // attendanceUnlocked：本機預覽假解鎖。fullVerifiedUntil：本機輸入總管理密碼(1102)的 30 分寬限。
       if (attendanceUnlocked || Date.now() < fullVerifiedUntil) return false;
@@ -3388,7 +3404,7 @@
       if (!label) return false;
       if (attendanceTempUnlockUntil[label] && Date.now() < attendanceTempUnlockUntil[label]) return false;
 
-      var cutoff = attendanceDeadlines[label]; // 完整截止時刻 'yyyy-MM-ddTHH:MM'
+      var cutoff = effectiveDeadline(label); // 手動優先，否則自動「活動前一天 23:59」
       if (!cutoff) return false;
 
       var m = new Date(cutoff);
@@ -3405,7 +3421,7 @@
       var lockRow = document.getElementById('attendance-lock-row');
       if (locked) {
         var label = getSharedDate();
-        var cutoff = (attendanceDeadlines[label] || '').replace('T', ' ');
+        var cutoff = effectiveDeadline(label).replace('T', ' ');
         document.getElementById('attendance-lock-msg').textContent =
           '「' + label + '」已超過調整截止時間（' + cutoff + '），如需修改請輸入管理密碼解鎖';
         lockRow.classList.remove('hidden');
@@ -3415,6 +3431,12 @@
     }
 
     // 讀取「目前這個標籤」的截止時刻與共用解鎖狀態，確保鎖定狀態是最新的（開啟出勤系統／切換標籤時呼叫）
+    // 每分鐘自動重新判斷鎖定狀態：即使頁面一直開著，時間一到就會自己鎖起來，不用重新整理。
+    setInterval(function () {
+      var av = document.getElementById('attendance-view');
+      if (av && !av.classList.contains('hidden')) applyAttendanceLockState();
+    }, 60000);
+
     function refreshAttendanceLockForToday() {
       var label = getSharedDate();
 
