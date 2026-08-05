@@ -2178,6 +2178,21 @@
       }
     }
 
+    // 後端時間戳是 UTC（Supabase 預設時區），顯示時 +8 小時轉成台灣時間。
+    // 支援 'YYYY-MM-DD HH:MM' 與 'YYYY-MM-DD HH:MM:SS' 兩種精度，維持原精度輸出。
+    function toTaipeiTime(s) {
+      if (!s) return '';
+      var hasSec = String(s).length >= 19;
+      var d = new Date(String(s).replace(' ', 'T') + 'Z'); // 當成 UTC 解析
+      if (isNaN(d.getTime())) return s;
+      var t = new Date(d.getTime() + 8 * 3600000);
+      function p(n) { return String(n).padStart(2, '0'); }
+      var out = t.getUTCFullYear() + '-' + p(t.getUTCMonth() + 1) + '-' + p(t.getUTCDate()) +
+        ' ' + p(t.getUTCHours()) + ':' + p(t.getUTCMinutes());
+      if (hasSec) out += ':' + p(t.getUTCSeconds());
+      return out;
+    }
+
     function buildJobOptionsHtml() {
       var html = '<option value=""></option>';
       JOB_OPTIONS.forEach(function (job) {
@@ -4125,7 +4140,7 @@
           return '<div class="access-admin-row">' +
             '<span class="access-admin-col-email">' + r.email + (r.isOwner ? ' <span class="access-admin-owner-tag">★</span>' : '') + '</span>' +
             '<span class="access-admin-col-role">' + (r.roleName || '') + '</span>' +
-            '<span class="access-admin-col-time">' + (r.time || '') + '</span>' +
+            '<span class="access-admin-col-time">' + toTaipeiTime(r.time) + '</span>' +
             '<span class="access-admin-col-status ' + statusClass + '">' + statusLabel + '</span>' +
             '<span class="access-admin-col-category">' + categoryHtml + '</span>' +
             '<span class="access-admin-col-actions">' + actionsHtml + '</span>' +
@@ -4223,7 +4238,7 @@
         }
         listEl.innerHTML = logs.map(function (l) {
           return '<div class="activity-log-row">' +
-            '<div class="activity-log-time">' + (l.time || '') + '</div>' +
+            '<div class="activity-log-time">' + toTaipeiTime(l.time) + '</div>' +
             '<div class="activity-log-desc">' + l.description + '</div>' +
             '</div>';
         }).join('');
