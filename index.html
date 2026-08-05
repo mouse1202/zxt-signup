@@ -1723,7 +1723,6 @@
           </div>
           <div class="attendance-date-row hidden" id="attendance-lock-row">
             <span class="attendance-summary" id="attendance-lock-msg"></span>
-            <button type="button" class="roster-back-btn admin-only-btn" onclick="openPasswordGate(unlockAttendanceEditing, 'attendance-view', false)">輸入密碼解鎖</button>
           </div>
           <div class="attendance-stats">
             <div class="attendance-stat-box">
@@ -3396,34 +3395,31 @@
       return attendanceDeadlines[label] || autoDeadlineForLabel(label) || '';
     }
 
+    // 是否已過截止時間（純時間判斷；「誰能改」由 applyAttendanceLockState 決定：鎖表後只有管理能改）
     function isAttendanceLockedNow() {
-      // attendanceUnlocked：本機預覽假解鎖。fullVerifiedUntil：本機輸入總管理密碼(1102)的 30 分寬限。
-      if (attendanceUnlocked || Date.now() < fullVerifiedUntil) return false;
-
-      var label = getSharedDate(); // 只針對「目前正在看的這個標籤」判斷
+      var label = getSharedDate();
       if (!label) return false;
-      if (attendanceTempUnlockUntil[label] && Date.now() < attendanceTempUnlockUntil[label]) return false;
-
       var cutoff = effectiveDeadline(label); // 手動優先，否則自動「活動前一天 23:59」
       if (!cutoff) return false;
-
       var m = new Date(cutoff);
       if (isNaN(m.getTime())) return false;
-
       return Date.now() >= m.getTime();
     }
 
     function applyAttendanceLockState() {
       var locked = isAttendanceLockedNow();
+      var isAdmin = currentAccessCategory === '管理';
+      var disable = locked && !isAdmin; // 鎖表後只有「管理」能修改，其他人一律鎖住
       var selects = Array.prototype.slice.call(document.querySelectorAll('#attendance-view .attendance-status'));
-      selects.forEach(function (select) { select.disabled = locked; });
+      selects.forEach(function (select) { select.disabled = disable; });
 
       var lockRow = document.getElementById('attendance-lock-row');
       if (locked) {
         var label = getSharedDate();
         var cutoff = effectiveDeadline(label).replace('T', ' ');
-        document.getElementById('attendance-lock-msg').textContent =
-          '「' + label + '」已超過調整截止時間（' + cutoff + '），如需修改請輸入管理密碼解鎖';
+        document.getElementById('attendance-lock-msg').textContent = isAdmin
+          ? '「' + label + '」已過調整截止時間（' + cutoff + '），一般成員無法修改；你是管理，可直接編輯。'
+          : '「' + label + '」已過調整截止時間（' + cutoff + '），已無法修改，如需異動請聯繫管理。';
         lockRow.classList.remove('hidden');
       } else {
         lockRow.classList.add('hidden');
@@ -3445,11 +3441,6 @@
         applyAttendanceLockState();
       }
 
-      function applyUnlockUntil(until) {
-        attendanceTempUnlockUntil[label] = until || 0;
-        applyAttendanceLockState();
-      }
-
       if (!label) { applyAttendanceLockState(); return; }
 
       if (window.google && google.script && google.script.run) {
@@ -3457,14 +3448,8 @@
           console.log('讀取出勤截止時間失敗：' + err.message);
           applyDeadline('');
         }).getAttendanceDeadline(label);
-
-        google.script.run.withSuccessHandler(applyUnlockUntil).withFailureHandler(function (err) {
-          console.log('讀取解鎖狀態失敗：' + err.message);
-          applyUnlockUntil(0);
-        }).getAttendanceTempUnlockUntil(label);
       } else {
         applyDeadline('');
-        applyUnlockUntil(0);
       }
     }
 
