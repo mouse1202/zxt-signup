@@ -1488,7 +1488,7 @@
 <script>
 (function () {
   var API = 'https://xltdagmzsycnqbflovff.supabase.co/functions/v1/zxtapi';
-  var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster','getAnnouncement','saveAnnouncement','addDateLabel'];
+  var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster','getAnnouncement','saveAnnouncement','addDateLabel','deleteAccessRequest','purgeRejected'];
 
   var JOB_COLORS = { '鐵衣':'e69138','血河':'cc0000','神相':'6fa8dc','素問':'f4cccc','九靈':'d9d2e9','碎夢':'4dd0e1','龍吟':'93c47d','玄機':'ffe599','潮光':'3c78d8' };
   var GROUP_BANNER = { '團一進攻':{bg:'1c4587',fg:'ffffff'}, '團二進攻':{bg:'990000',fg:'ffffff'}, '防守團':{bg:'f1c232',fg:'000000'} };
@@ -4129,11 +4129,11 @@
           if (r.isOwner) {
             actionsHtml = '<span class="access-admin-owner-badge">擁有者</span>';
           } else if (r.status === '已核准') {
-            actionsHtml = '<button type="button" class="access-admin-btn access-admin-btn-reject" onclick="setAccessRequestFromAdmin(\'' + safeEmail + '\', \'已拒絕\')">剔除</button>';
+            actionsHtml = '<button type="button" class="access-admin-btn access-admin-btn-reject" onclick="deleteAccessRequestFromAdmin(\'' + safeEmail + '\')">剔除</button>';
           } else {
             actionsHtml =
               '<button type="button" class="access-admin-btn access-admin-btn-approve" onclick="setAccessRequestFromAdmin(\'' + safeEmail + '\', \'已核准\')">核准</button>' +
-              '<button type="button" class="access-admin-btn access-admin-btn-reject" onclick="setAccessRequestFromAdmin(\'' + safeEmail + '\', \'已拒絕\')">拒絕</button>';
+              '<button type="button" class="access-admin-btn access-admin-btn-reject" onclick="deleteAccessRequestFromAdmin(\'' + safeEmail + '\')">拒絕</button>';
           }
 
           var categoryHtml = r.isOwner
@@ -4191,6 +4191,23 @@
       }).withFailureHandler(function (err) {
         showAlertModal('更新失敗：' + err.message);
       }).setAccessRequestStatus(email, status);
+    }
+
+    // 拒絕／剔除＝直接刪除該筆申請紀錄（不保留已拒絕狀態）
+    function deleteAccessRequestFromAdmin(email) {
+      if (!(window.google && google.script && google.script.run)) {
+        showAlertModal('本機預覽模式，無法刪除。');
+        return;
+      }
+      showConfirmModal('確認移除', '確定要移除「' + email + '」嗎？會直接刪除這筆紀錄、不保留。', function () {
+        google.script.run.withSuccessHandler(function (res) {
+          res = res || {};
+          if (res.success === false) { showAlertModal(res.message || '刪除失敗'); return; }
+          loadAccessAdminList();
+        }).withFailureHandler(function (err) {
+          showAlertModal('刪除失敗：' + err.message);
+        }).deleteAccessRequest(email);
+      });
     }
 
     function setAccessRequestCategoryFromAdmin(email, category) {
