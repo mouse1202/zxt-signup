@@ -1466,6 +1466,20 @@
       .roster-title { font-size: 18px; }
     }
 
+    /* 出勤系統「職業」欄的篩選下拉 */
+    .attendance-job-filter {
+      margin-left: 8px;
+      background: #0A0A0A;
+      border: 1px solid #6e5e30;
+      color: #f0d888;
+      border-radius: 6px;
+      padding: 2px 6px;
+      font-size: 13px;
+      font-family: inherit;
+      vertical-align: middle;
+    }
+    .attendance-job-filter:focus { outline: none; border-color: #f0d060; }
+
     /* ── 約戰公告：出勤系統右側的獨立側邊視窗 ── */
     .container.attendance-wide { max-width: 1096px; }
     .attendance-layout-row { display: flex; gap: 16px; align-items: flex-start; width: 100%; }
@@ -1745,7 +1759,9 @@
           <div class="member-section-title">主要成員</div>
           <div class="attendance-header-row">
             <span class="attendance-col-name">姓名</span>
-            <span class="attendance-col-job">職業</span>
+            <span class="attendance-col-job">職業
+              <select id="attendance-job-filter" class="attendance-job-filter" onchange="applyAttendanceJobFilter()"></select>
+            </span>
             <span class="attendance-col-status">是否出勤</span>
           </div>
           <div class="attendance-list" id="attendance-list"></div>
@@ -3612,6 +3628,26 @@
       }
     }
 
+    // 職業篩選下拉：第一次填入「全部 + 各職業」選項（只填一次）
+    function ensureJobFilterOptions() {
+      var sel = document.getElementById('attendance-job-filter');
+      if (!sel || sel.options.length > 0) return;
+      var html = '<option value="">全部</option>';
+      JOB_OPTIONS.forEach(function (job) { html += '<option value="' + job + '">' + job + '</option>'; });
+      sel.innerHTML = html;
+    }
+
+    // 依選到的職業篩選「主要成員」名單：選某職業只顯示該職業的人，選「全部」顯示所有人。
+    // 只影響主要成員區（#attendance-list），外援/試訓不受影響；統計數字仍以全部人計算。
+    function applyAttendanceJobFilter() {
+      var sel = document.getElementById('attendance-job-filter');
+      var job = sel ? sel.value : '';
+      var rows = Array.prototype.slice.call(document.querySelectorAll('#attendance-list .attendance-row'));
+      rows.forEach(function (row) {
+        row.style.display = (!job || row.dataset.job === job) ? '' : 'none';
+      });
+    }
+
     function loadAttendanceFromMembers() {
       function renderMembers(members) {
         members = members || [];
@@ -3622,6 +3658,8 @@
         renderAttendanceGroup_('attendance-list', 'attendance-empty', mainMembers);
         renderAttendanceGroup_('attendance-guest-list', 'attendance-guest-empty', guestMembers);
         renderAttendanceGroup_('attendance-trial-list', 'attendance-trial-empty', trialMembers);
+        ensureJobFilterOptions();
+        applyAttendanceJobFilter(); // 重新渲染後套用目前的職業篩選（只篩主要成員）
 
         var date = document.getElementById('attendance-date').value;
         applyAttendanceStatusesForDate(date);
