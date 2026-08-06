@@ -3119,8 +3119,8 @@
         var select = document.getElementById(id);
         if (!select) return;
         var currentValue = select.value;
-        // 出勤系統的日期選單依日期由小到大排序；排表工具維持原本「最新排最前面」的順序不變。
-        var labelsForThisSelect = (id === 'attendance-date') ? sortDateLabelsAscending_(knownDateLabels) : knownDateLabels;
+        // 出勤系統與排表工具的日期選單都依日期由小到大排序（同日多場次再依字母）。
+        var labelsForThisSelect = sortDateLabelsAscending_(knownDateLabels);
         select.innerHTML = buildDateOptionsHtml(labelsForThisSelect, DATE_SELECT_ALLOW_ADD[id]);
         if (currentValue && knownDateLabels.indexOf(currentValue) !== -1) {
           select.value = currentValue;
