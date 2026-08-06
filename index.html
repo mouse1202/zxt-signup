@@ -4121,7 +4121,7 @@
           return;
         }
 
-        listEl.innerHTML = requests.map(function (r) {
+        function rowHtml(r) {
           var statusClass = ACCESS_STATUS_CLASS[r.status] || '';
           var statusLabel = ACCESS_STATUS_LABELS[r.status] || r.status;
           var safeEmail = r.email.replace(/'/g, "\\'");
@@ -4152,7 +4152,23 @@
             '<span class="access-admin-col-category">' + categoryHtml + '</span>' +
             '<span class="access-admin-col-actions">' + actionsHtml + '</span>' +
             '</div>';
-        }).join('');
+        }
+
+        // 依類別分組顯示：管理 → 文書 → 幫眾，各組加一個標題（含人數），方便區分
+        var groupKeys = ['管理', '文書', '幫眾'];
+        var html = '';
+        groupKeys.forEach(function (key) {
+          var list = requests.filter(function (r) { return (r.category || '幫眾') === key; });
+          if (list.length === 0) return;
+          html += '<div class="member-section-title">' + key + '（' + list.length + '）</div>';
+          html += list.map(rowHtml).join('');
+        });
+        var others = requests.filter(function (r) { return groupKeys.indexOf(r.category || '幫眾') === -1; });
+        if (others.length > 0) {
+          html += '<div class="member-section-title">其他（' + others.length + '）</div>';
+          html += others.map(rowHtml).join('');
+        }
+        listEl.innerHTML = html;
       }
 
       if (window.google && google.script && google.script.run) {
