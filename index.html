@@ -4416,6 +4416,10 @@
         showAlertModal('請輸入 Gmail');
         return;
       }
+      if (!/@gmail\.com$/i.test(email)) {
+        showAlertModal('輸入錯誤：請輸入 @gmail.com 結尾的信箱');
+        return;
+      }
       var btn = document.getElementById('access-gate-login-submit');
       btn.disabled = true;
 
@@ -4440,6 +4444,10 @@
       var roleName = document.getElementById('access-gate-role-input').value.trim();
       if (!email) {
         showAlertModal('請輸入 Gmail');
+        return;
+      }
+      if (!/@gmail\.com$/i.test(email)) {
+        showAlertModal('輸入錯誤：請輸入 @gmail.com 結尾的信箱');
         return;
       }
       if (!roleName) {
