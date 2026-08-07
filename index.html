@@ -1712,10 +1712,10 @@
         <div class="roster-header">
           <span class="roster-title">出勤系統</span>
           <div class="roster-header-actions">
-            <button type="button" class="roster-back-btn admin-only-btn" onclick="openPasswordGate(openRosterView, 'attendance-view', true)">排表工具</button>
-            <button type="button" class="roster-back-btn admin-only-btn" onclick="openPasswordGate(openMemberView, 'attendance-view', false)">管理名單</button>
-            <button type="button" class="roster-back-btn admin-only-btn" onclick="openPasswordGate(openAccessAdminView, 'attendance-view', false)">審核申請</button>
-            <button type="button" class="roster-back-btn admin-only-btn" onclick="openPasswordGate(openActivityLogView, 'attendance-view', false)">操作記錄</button>
+            <button type="button" class="roster-back-btn admin-only-btn hidden" onclick="openPasswordGate(openRosterView, 'attendance-view', true)">排表工具</button>
+            <button type="button" class="roster-back-btn admin-only-btn hidden" onclick="openPasswordGate(openMemberView, 'attendance-view', false)">管理名單</button>
+            <button type="button" class="roster-back-btn admin-only-btn hidden" onclick="openPasswordGate(openAccessAdminView, 'attendance-view', false)">審核申請</button>
+            <button type="button" class="roster-back-btn admin-only-btn hidden" onclick="openPasswordGate(openActivityLogView, 'attendance-view', false)">操作記錄</button>
             <button type="button" class="roster-back-btn" onclick="closeAttendanceView()">回首頁</button>
           </div>
         </div>
@@ -1723,9 +1723,9 @@
           <div class="attendance-date-row">
             <label for="attendance-date" class="attendance-date-label">日期：</label>
             <select id="attendance-date" class="attendance-date-input" onchange="onAttendanceDateChange()"></select>
-            <button type="button" class="roster-back-btn admin-only-btn" onclick="openPasswordGate(renameCurrentDateLabel, 'attendance-view', false)">重新命名</button>
-            <button type="button" class="roster-back-btn admin-only-btn" onclick="openPasswordGate(confirmDeleteAttendanceRecord, 'attendance-view', false)">刪除此紀錄</button>
-            <button type="button" class="roster-back-btn admin-only-btn" onclick="openPasswordGate(openAttendanceDeadlineControl, 'attendance-view', false)">設定調整截止時間</button>
+            <button type="button" class="roster-back-btn admin-only-btn hidden" onclick="openPasswordGate(renameCurrentDateLabel, 'attendance-view', false)">重新命名</button>
+            <button type="button" class="roster-back-btn admin-only-btn hidden" onclick="openPasswordGate(confirmDeleteAttendanceRecord, 'attendance-view', false)">刪除此紀錄</button>
+            <button type="button" class="roster-back-btn admin-only-btn hidden" onclick="openPasswordGate(openAttendanceDeadlineControl, 'attendance-view', false)">設定調整截止時間</button>
           </div>
           <div class="attendance-date-row hidden" id="attendance-deadline-row">
             <label for="attendance-deadline-date-input" class="attendance-date-label">截止日期：</label>
