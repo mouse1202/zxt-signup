@@ -1522,7 +1522,47 @@
     #video-view .video-url-input,
     #video-view .video-vis-select { background: #0A0A0A; border-color: #6B1023; color: #FFFFEF; }
     #video-view .roster-back-btn { border-color: #6B1023; }
-    @media (max-width: 640px) { #video-view .video-row { border-color: #6B1023; } }
+
+    /* 錄影回報：兩欄 + 表單 */
+    .video-report-row { display: flex; gap: 16px; align-items: flex-start; width: 100%; }
+    .video-report-row > .roster-section { flex: 1; min-width: 0; }
+    .video-status-sidebar { flex: 0 0 320px; width: 320px; }
+    .vr-field { margin-bottom: 14px; }
+    .vr-label { display: block; font-size: 14px; color: #FFFFEF; margin-bottom: 6px; letter-spacing: 1px; }
+    .vr-input { width: 100%; background: #0A0A0A; border: 1px solid #6B1023; color: #FFFFEF; border-radius: 8px; padding: 10px 12px; font-size: 15px; font-family: inherit; }
+    .vr-input:focus { outline: none; border-color: #f0d060; }
+    .vr-input:disabled { opacity: 0.55; }
+    .vr-hint { font-size: 12px; color: #c0a860; margin: 10px 0 0; line-height: 1.6; }
+    .vr-status-box { border: 1px solid #6B1023; border-radius: 8px; padding: 14px; min-height: 130px; color: #c0a860; font-size: 14px; line-height: 1.8; white-space: pre-wrap; }
+    .vr-col-s { flex: 1.2; min-width: 0; color: #FFFFEF; font-size: 13px; }
+    .vr-yes { color: #8bd17c; }
+    .vr-no { color: #ff8a80; }
+    .vr-link { color: #6fa8dc; text-decoration: underline; word-break: break-all; }
+    #video-view .roster-section { color: #FFFFEF; }
+    #video-view .vr-status-box { color: #c0a860; }
+
+    /* 影片清冊沿用出勤紅黑配色 */
+    #video-roster-view .roster-section { background: #000000; border-color: #FF0000; color: #FFFFEF; }
+    #video-roster-view .roster-title,
+    #video-roster-view .roster-back-btn,
+    #video-roster-view .attendance-date-label,
+    #video-roster-view .member-section-title,
+    #video-roster-view .video-header-row span,
+    #video-roster-view .video-col-name,
+    #video-roster-view .video-col-job,
+    #video-roster-view .vr-col-s,
+    #video-roster-view .activity-log-time,
+    #video-roster-view .activity-log-desc { color: #FFFFEF; }
+    #video-roster-view .attendance-date-input { background: #0A0A0A; border-color: #6B1023; color: #FFFFEF; }
+    #video-roster-view .roster-back-btn { border-color: #6B1023; }
+
+    @media (max-width: 900px) {
+      .video-report-row { flex-direction: column; }
+      .video-status-sidebar { flex: none; width: 100%; }
+    }
+    @media (max-width: 640px) {
+      #video-roster-view .video-row { flex-wrap: wrap; border: 1px solid #6B1023; border-radius: 8px; padding: 8px; }
+    }
 
     /* ── 約戰公告：出勤系統右側的獨立側邊視窗 ── */
     .container.attendance-wide { max-width: 1096px; }
@@ -1546,7 +1586,7 @@
 <script>
 (function () {
   var API = 'https://xltdagmzsycnqbflovff.supabase.co/functions/v1/zxtapi';
-  var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster','getAnnouncement','saveAnnouncement','addDateLabel','deleteAccessRequest','purgeRejected','getVideoUploads','saveVideoUpload'];
+  var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster','getAnnouncement','saveAnnouncement','addDateLabel','deleteAccessRequest','purgeRejected','saveVideoReport','getMyVideoStatus','getVideoRoster','getVideoActivityLog'];
 
   var JOB_COLORS = { '鐵衣':'e69138','血河':'cc0000','神相':'6fa8dc','素問':'f4cccc','九靈':'d9d2e9','碎夢':'4dd0e1','龍吟':'93c47d','玄機':'ffe599','潮光':'3c78d8' };
   var GROUP_BANNER = { '團一進攻':{bg:'1c4587',fg:'ffffff'}, '團二進攻':{bg:'990000',fg:'ffffff'}, '防守團':{bg:'f1c232',fg:'000000'} };
@@ -1701,34 +1741,80 @@
       </div>
     </div>
 
-    <!-- Video upload view -->
+    <!-- Video report view -->
     <div class="view hidden" id="video-view">
+      <div class="video-report-row">
+        <div class="roster-section">
+          <div class="roster-header">
+            <span class="roster-title">錄影回報</span>
+            <div class="roster-header-actions">
+              <button type="button" class="roster-back-btn clerk-admin-btn hidden" onclick="openVideoRosterView()">影片清冊</button>
+              <button type="button" class="roster-back-btn" onclick="closeVideoView()">回首頁</button>
+            </div>
+          </div>
+          <div class="roster-body">
+            <div class="vr-field">
+              <label class="vr-label">選擇場次</label>
+              <select id="vr-session" class="vr-input" onchange="onVrSessionChange()"><option value="">請選擇場次</option></select>
+            </div>
+            <div class="vr-field">
+              <label class="vr-label">選擇職業</label>
+              <select id="vr-job" class="vr-input" onchange="onVrJobChange()" disabled><option value="">請先選擇場次</option></select>
+            </div>
+            <div class="vr-field">
+              <label class="vr-label">選擇角色名稱</label>
+              <select id="vr-name" class="vr-input" onchange="onVrNameChange()" disabled><option value="">請先選擇職業</option></select>
+            </div>
+            <div class="vr-field">
+              <label class="vr-label">第一場錄影網址</label>
+              <input type="text" id="vr-url1" class="vr-input" placeholder="請貼上第一場影片網址" />
+            </div>
+            <div class="vr-field">
+              <label class="vr-label">第二場錄影網址</label>
+              <input type="text" id="vr-url2" class="vr-input" placeholder="請貼上第二場影片網址" />
+            </div>
+            <p class="vr-hint">YouTube 請設為「不公開」，不要設為「私人」；也支援一般雲端影片網址。</p>
+            <button type="button" class="roster-save-btn" id="vr-submit" onclick="submitVideoReport()">送出錄影回報</button>
+          </div>
+        </div>
+        <aside class="video-status-sidebar">
+          <div class="roster-section">
+            <div class="roster-header"><span class="roster-title">我的繳交狀態</span></div>
+            <div class="roster-body">
+              <div class="vr-status-box" id="vr-status">先在左側選擇場次、職業與角色名稱，再按下查詢。</div>
+              <button type="button" class="roster-save-btn" id="vr-query" onclick="queryVideoStatus()">查詢是否已繳交</button>
+              <p class="vr-hint">查詢結果只顯示是否已交第一場或第二場，不會公開影片網址。</p>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <!-- Video roster (admin / clerk backend) -->
+    <div class="view hidden" id="video-roster-view">
       <div class="roster-section">
         <div class="roster-header">
-          <span class="roster-title">影片上傳</span>
-          <button type="button" class="roster-back-btn" onclick="closeVideoView()">回首頁</button>
+          <span class="roster-title">影片清冊</span>
+          <button type="button" class="roster-back-btn" onclick="closeVideoRosterView()">返回錄影回報</button>
         </div>
         <div class="roster-body">
           <div class="attendance-date-row">
-            <label for="video-date" class="attendance-date-label">日期：</label>
-            <select id="video-date" class="attendance-date-input" onchange="onVideoDateChange()"></select>
+            <label for="vroster-date" class="attendance-date-label">日期：</label>
+            <select id="vroster-date" class="attendance-date-input" onchange="onVideoRosterDateChange()"></select>
           </div>
-          <div class="attendance-stats">
-            <div class="attendance-stat-box"><span class="attendance-stat-value" id="video-stat-total">0</span><span class="attendance-stat-label">總人數</span></div>
-            <div class="attendance-stat-box"><span class="attendance-stat-value" id="video-stat-uploaded">0</span><span class="attendance-stat-label">已上傳</span></div>
-            <div class="attendance-stat-box"><span class="attendance-stat-value" id="video-stat-missing">0</span><span class="attendance-stat-label">未上傳</span></div>
-            <div class="attendance-stat-box"><span class="attendance-stat-value" id="video-stat-public">0</span><span class="attendance-stat-label">公開數</span></div>
-          </div>
-          <div class="member-section-title">主要成員</div>
+          <div class="member-section-title">上傳清冊</div>
           <div class="video-header-row">
             <span class="video-col-name">姓名</span>
-            <span class="video-col-job">職業</span>
-            <span class="video-col-url">影片網址</span>
-            <span class="video-col-time">上傳時間</span>
-            <span class="video-col-vis">公開/私人</span>
+            <span class="video-col-job">職業
+              <select id="vroster-job-filter" class="attendance-job-filter" onchange="applyVideoRosterJobFilter()"></select>
+            </span>
+            <span class="vr-col-s">第一場</span>
+            <span class="vr-col-s">第二場</span>
           </div>
-          <div class="video-list" id="video-list"></div>
-          <p class="attendance-empty hidden" id="video-empty">尚未建立主要成員名單。</p>
+          <div class="video-list" id="vroster-list"></div>
+          <p class="attendance-empty hidden" id="vroster-empty">這個場次還沒有人上傳。</p>
+          <div class="member-section-title">上傳操作記錄（僅影片）</div>
+          <div class="activity-log-list" id="vroster-log"></div>
         </div>
       </div>
     </div>
@@ -2131,7 +2217,7 @@
     var ATTENDANCE_STATUS_OPTIONS = ['出勤', '請假', '臨時請假'];
 
     // 所有可切換的畫面，以及各畫面是否要用「一頁寬」樣式
-    var ALL_VIEW_IDS = ['main-view', 'password-view', 'roster-view', 'attendance-view', 'member-view', 'access-admin-view', 'activity-log-view', 'video-view'];
+    var ALL_VIEW_IDS = ['main-view', 'password-view', 'roster-view', 'attendance-view', 'member-view', 'access-admin-view', 'activity-log-view', 'video-view', 'video-roster-view'];
     var VIEW_WIDE = {
       'main-view': false,
       'roster-view': true,
@@ -2167,7 +2253,7 @@
         // 出勤系統右側多一個「約戰公告」側邊視窗，需要額外寬度（跟名單管理同寬）
         document.querySelector('.container').classList.toggle('attendance-wide', id === 'attendance-view');
         // 出勤系統／排表工具開啟時，底圖霧化一下，避免顏色太鮮豔搶過面板內容
-        document.body.classList.toggle('bg-frosted', id === 'roster-view' || id === 'attendance-view' || id === 'video-view');
+        document.body.classList.toggle('bg-frosted', id === 'roster-view' || id === 'attendance-view' || id === 'video-view' || id === 'video-roster-view');
 
         target.classList.remove('hidden');
         target.classList.add('fade-out'); // 一開始是透明的
@@ -3206,12 +3292,11 @@
     // 出勤系統已經新增過的日期裡選，不會出現新增選項。
     var DATE_SELECT_ALLOW_ADD = {
       'attendance-date': true,
-      'roster-date': false,
-      'video-date': false
+      'roster-date': false
     };
 
     function refreshDateSelectOptions() {
-      ['attendance-date', 'roster-date', 'video-date'].forEach(function (id) {
+      ['attendance-date', 'roster-date'].forEach(function (id) {
         var select = document.getElementById(id);
         if (!select) return;
         var currentValue = select.value;
@@ -3869,126 +3954,183 @@
       trialEl.innerHTML = buildJobCountRowHtml_(countMembersByJob_('trial-list'));
     }
 
-    // ── 影片上傳頁 ──
+
+    // ── 錄影回報頁 ──
+    var videoMembers = null; // 主要成員快取（給場次/職業/角色連動用）
+
+    function fillVideoSessionOptions(selectId, placeholder) {
+      var sel = document.getElementById(selectId);
+      if (!sel) return;
+      var labels = sortDateLabelsAscending_(knownDateLabels || []);
+      var html = placeholder ? '<option value="">' + placeholder + '</option>' : '';
+      labels.forEach(function (l) { html += '<option value="' + l.replace(/"/g, '&quot;') + '">' + l + '</option>'; });
+      sel.innerHTML = html;
+    }
+
     function openVideoView() {
       ensureDateLabelsLoaded(function () {
-        document.getElementById('video-date').value = getSharedDate();
-        loadVideoUploads(getSharedDate());
+        fillVideoSessionOptions('vr-session', '請選擇場次');
+        resetVrForm();
+        applyAccessCategoryUI(); // 顯示/隱藏「影片清冊」按鈕（管理+文書才看得到）
       }, false);
       showView('video-view');
     }
     function closeVideoView() { showView('main-view'); }
-    function onVideoDateChange() {
-      var select = document.getElementById('video-date');
-      setSharedDate(select.value);
-      loadVideoUploads(getSharedDate());
+
+    function resetVrForm() {
+      document.getElementById('vr-session').value = '';
+      var jobSel = document.getElementById('vr-job'); jobSel.innerHTML = '<option value="">請先選擇場次</option>'; jobSel.disabled = true;
+      var nameSel = document.getElementById('vr-name'); nameSel.innerHTML = '<option value="">請先選擇職業</option>'; nameSel.disabled = true;
+      document.getElementById('vr-url1').value = '';
+      document.getElementById('vr-url2').value = '';
+      document.getElementById('vr-status').textContent = '先在左側選擇場次、職業與角色名稱，再按下查詢。';
     }
 
-    function loadVideoUploads(date) {
-      var listEl = document.getElementById('video-list');
-      var emptyEl = document.getElementById('video-empty');
-      if (!(window.google && google.script && google.script.run)) { return; }
+    function onVrSessionChange() {
+      var session = document.getElementById('vr-session').value;
+      var jobSel = document.getElementById('vr-job');
+      var nameSel = document.getElementById('vr-name');
+      nameSel.innerHTML = '<option value="">請先選擇職業</option>'; nameSel.disabled = true;
+      document.getElementById('vr-url1').value = ''; document.getElementById('vr-url2').value = '';
+      if (!session) { jobSel.innerHTML = '<option value="">請先選擇場次</option>'; jobSel.disabled = true; return; }
+      function fillJobs() {
+        var jobs = [];
+        (videoMembers || []).forEach(function (m) { if (m.job && jobs.indexOf(m.job) === -1) jobs.push(m.job); });
+        jobs.sort(function (a, b) { var ia = JOB_OPTIONS.indexOf(a), ib = JOB_OPTIONS.indexOf(b); if (ia < 0) ia = 99; if (ib < 0) ib = 99; return ia - ib; });
+        var html = '<option value="">請選擇職業</option>';
+        jobs.forEach(function (j) { html += '<option value="' + j + '">' + j + '</option>'; });
+        jobSel.innerHTML = html; jobSel.disabled = false;
+      }
+      if (videoMembers) { fillJobs(); }
+      else if (window.google && google.script && google.script.run) {
+        google.script.run.withSuccessHandler(function (m) { videoMembers = m || []; fillJobs(); })
+          .withFailureHandler(function () { videoMembers = []; fillJobs(); }).getMemberList();
+      }
+    }
+
+    function onVrJobChange() {
+      var job = document.getElementById('vr-job').value;
+      var nameSel = document.getElementById('vr-name');
+      document.getElementById('vr-url1').value = ''; document.getElementById('vr-url2').value = '';
+      if (!job) { nameSel.innerHTML = '<option value="">請先選擇職業</option>'; nameSel.disabled = true; return; }
+      var names = (videoMembers || []).filter(function (m) { return m.job === job; }).map(function (m) { return m.name; });
+      var html = '<option value="">請選擇角色</option>';
+      names.forEach(function (n) { html += '<option value="' + n.replace(/"/g, '&quot;') + '">' + n + '</option>'; });
+      nameSel.innerHTML = html; nameSel.disabled = false;
+    }
+    function onVrNameChange() {
+      var n = document.getElementById('vr-name').value;
+      if (n) document.getElementById('vr-status').textContent = '已選擇「' + n + '」，可按「查詢是否已繳交」。';
+    }
+
+    function submitVideoReport() {
+      var session = document.getElementById('vr-session').value;
+      var job = document.getElementById('vr-job').value;
+      var name = document.getElementById('vr-name').value;
+      var url1 = document.getElementById('vr-url1').value.trim();
+      var url2 = document.getElementById('vr-url2').value.trim();
+      if (!session) { showAlertModal('請選擇場次'); return; }
+      if (!name) { showAlertModal('請選擇角色名稱'); return; }
+      if (!url1 && !url2) { showAlertModal('請至少貼上一場的影片網址'); return; }
+      if (!(window.google && google.script && google.script.run)) { showAlertModal('本機預覽模式，無法送出'); return; }
+      var btn = document.getElementById('vr-submit'); btn.disabled = true; btn.textContent = '送出中...';
+      google.script.run.withSuccessHandler(function () {
+        btn.disabled = false; btn.textContent = '送出錄影回報';
+        showAlertModal('已送出錄影回報！');
+        document.getElementById('vr-status').innerHTML = '「' + name + '」（' + session + '）<br>第一場：<span class="' + (url1 ? 'vr-yes' : 'vr-no') + '">' + (url1 ? '已繳' : '未繳') + '</span><br>第二場：<span class="' + (url2 ? 'vr-yes' : 'vr-no') + '">' + (url2 ? '已繳' : '未繳') + '</span>';
+      }).withFailureHandler(function (err) {
+        btn.disabled = false; btn.textContent = '送出錄影回報'; showAlertModal('送出失敗：' + err.message);
+      }).saveVideoReport({ date: session, name: name, job: job, url1: url1, url2: url2, actorEmail: currentAccessEmail, actorRoleName: currentAccessRoleName });
+    }
+
+    function queryVideoStatus() {
+      var session = document.getElementById('vr-session').value;
+      var name = document.getElementById('vr-name').value;
+      var box = document.getElementById('vr-status');
+      if (!session || !name) { showAlertModal('請先選擇場次、職業與角色名稱'); return; }
+      if (!(window.google && google.script && google.script.run)) return;
+      box.textContent = '查詢中...';
+      google.script.run.withSuccessHandler(function (res) {
+        res = res || {};
+        box.innerHTML = '「' + name + '」（' + session + '）<br>第一場：<span class="' + (res.s1 ? 'vr-yes' : 'vr-no') + '">' + (res.s1 ? '已繳' : '未繳') + '</span><br>第二場：<span class="' + (res.s2 ? 'vr-yes' : 'vr-no') + '">' + (res.s2 ? '已繳' : '未繳') + '</span>';
+      }).withFailureHandler(function (err) { box.textContent = '查詢失敗：' + err.message; }).getMyVideoStatus(session, name);
+    }
+
+    // ── 影片清冊（管理+文書後台）──
+    function openVideoRosterView() {
+      if (currentAccessCategory !== '管理' && currentAccessCategory !== '文書') { showAlertModal('只有管理或文書才能開影片清冊'); return; }
+      ensureDateLabelsLoaded(function () {
+        fillVideoSessionOptions('vroster-date', '');
+        var sel = document.getElementById('vroster-date');
+        if (!sel.value && sel.options.length) sel.value = sel.options[0].value;
+        ensureVideoRosterJobFilter();
+        loadVideoRoster(sel.value);
+        loadVideoActivityLog();
+      }, false);
+      showView('video-roster-view');
+    }
+    function closeVideoRosterView() { showView('video-view'); }
+    function onVideoRosterDateChange() { loadVideoRoster(document.getElementById('vroster-date').value); }
+
+    function ensureVideoRosterJobFilter() {
+      var sel = document.getElementById('vroster-job-filter');
+      if (!sel || sel.options.length > 0) return;
+      var html = '<option value="">全部</option>';
+      JOB_OPTIONS.forEach(function (j) { html += '<option value="' + j + '">' + j + '</option>'; });
+      sel.innerHTML = html;
+    }
+    function applyVideoRosterJobFilter() {
+      var job = document.getElementById('vroster-job-filter').value;
+      Array.prototype.slice.call(document.querySelectorAll('#vroster-list .video-row')).forEach(function (row) {
+        row.style.display = (!job || row.dataset.job === job) ? '' : 'none';
+      });
+    }
+
+    function loadVideoRoster(date) {
+      var listEl = document.getElementById('vroster-list');
+      var emptyEl = document.getElementById('vroster-empty');
+      if (!(window.google && google.script && google.script.run)) return;
       var members = null, records = null;
       function ready() {
         if (members === null || records === null) return;
-        if (members.length === 0) { listEl.innerHTML = ''; emptyEl.classList.remove('hidden'); updateVideoStats([], []); return; }
+        if (members.length === 0) { listEl.innerHTML = ''; emptyEl.classList.remove('hidden'); return; }
         emptyEl.classList.add('hidden');
-        renderVideoList(members, records);
+        renderVideoRoster(members, records);
       }
-      google.script.run.withSuccessHandler(function (m) { members = m || []; ready(); })
-        .withFailureHandler(function () { members = []; ready(); }).getMemberList();
-      google.script.run.withSuccessHandler(function (r) { records = r || []; ready(); })
-        .withFailureHandler(function () { records = []; ready(); }).getVideoUploads(date);
+      google.script.run.withSuccessHandler(function (m) { members = m || []; ready(); }).withFailureHandler(function () { members = []; ready(); }).getMemberList();
+      google.script.run.withSuccessHandler(function (r) { records = r || []; ready(); }).withFailureHandler(function () { records = []; ready(); }).getVideoRoster(date);
     }
 
-    function renderVideoList(members, records) {
-      var listEl = document.getElementById('video-list');
+    function renderVideoRoster(members, records) {
       var byName = {}; records.forEach(function (r) { byName[r.name] = r; });
-      var isAdmin = currentAccessCategory === '管理';
-      listEl.innerHTML = '';
-      members.forEach(function (m) {
-        var rec = byName[m.name] || { url: '', visibility: 'public', time: '' };
-        var isSelf = (m.name === currentAccessRoleName);
-        var canSee = (rec.visibility !== 'private') || isAdmin || isSelf;
-        var row = document.createElement('div');
-        row.className = 'video-row';
-        row.dataset.name = m.name; row.dataset.job = m.job || '';
-        var nameSpan = document.createElement('span'); nameSpan.className = 'video-col-name'; nameSpan.textContent = m.name;
-        var jobSpan = document.createElement('span'); jobSpan.className = 'video-col-job'; jobSpan.textContent = m.job || '';
-        var urlWrap = document.createElement('span'); urlWrap.className = 'video-col-url';
-        var timeSpan = document.createElement('span'); timeSpan.className = 'video-col-time'; timeSpan.textContent = rec.time ? toTaipeiTime(rec.time) : '';
-        var visWrap = document.createElement('span'); visWrap.className = 'video-col-vis';
-        if (canSee) {
-          var input = document.createElement('input'); input.type = 'text'; input.className = 'video-url-input'; input.placeholder = '貼上影片網址'; input.value = rec.url || '';
-          input.onchange = function () { saveVideoRow(row); };
-          urlWrap.appendChild(input);
-          var vsel = document.createElement('select'); vsel.className = 'video-vis-select';
-          vsel.innerHTML = '<option value="public">公開</option><option value="private">私人</option>';
-          vsel.value = rec.visibility || 'public';
-          vsel.onchange = function () { saveVideoRow(row); };
-          visWrap.appendChild(vsel);
-        } else {
-          urlWrap.innerHTML = '<span class="video-locked">🔒 私人</span>';
-          visWrap.innerHTML = '<span class="video-locked">私人</span>';
-          if (rec.time) timeSpan.dataset.uploaded = '1';
-        }
-        row.appendChild(nameSpan); row.appendChild(jobSpan); row.appendChild(urlWrap); row.appendChild(timeSpan); row.appendChild(visWrap);
-        listEl.appendChild(row);
-      });
-      updateVideoStats(members, records);
+      var sorted = members.slice().sort(compareByJob_);
+      var listEl = document.getElementById('vroster-list');
+      function cell(url, time) {
+        if (url) return '<a class="vr-link" href="' + url.replace(/"/g, '&quot;') + '" target="_blank" rel="noopener">看影片</a> <span class="vr-yes">✔</span><br><span style="font-size:11px;color:#c0a860;">' + (time ? toTaipeiTime(time) : '') + '</span>';
+        return '<span class="vr-no">未交</span>';
+      }
+      listEl.innerHTML = sorted.map(function (m) {
+        var rec = byName[m.name] || { url1: '', url2: '', time1: '', time2: '' };
+        return '<div class="video-row" data-name="' + (m.name || '').replace(/"/g, '&quot;') + '" data-job="' + (m.job || '').replace(/"/g, '&quot;') + '">' +
+          '<span class="video-col-name">' + m.name + '</span>' +
+          '<span class="video-col-job">' + (m.job || '') + '</span>' +
+          '<span class="vr-col-s">' + cell(rec.url1, rec.time1) + '</span>' +
+          '<span class="vr-col-s">' + cell(rec.url2, rec.time2) + '</span>' +
+          '</div>';
+      }).join('');
+      applyVideoRosterJobFilter();
     }
 
-    function saveVideoRow(row) {
-      var input = row.querySelector('.video-url-input');
-      var vsel = row.querySelector('.video-vis-select');
-      if (!input) return; // 鎖住的私人列無法編輯
+    function loadVideoActivityLog() {
+      var el = document.getElementById('vroster-log');
       if (!(window.google && google.script && google.script.run)) return;
-      var payload = {
-        date: getSharedDate(), name: row.dataset.name, job: row.dataset.job,
-        url: input.value.trim(), visibility: vsel ? vsel.value : 'public',
-        actorEmail: currentAccessEmail, actorRoleName: currentAccessRoleName
-      };
-      google.script.run.withSuccessHandler(function (res) {
-        var timeSpan = row.querySelector('.video-col-time');
-        if (timeSpan) timeSpan.textContent = (res && res.time) ? toTaipeiTime(res.time) : '';
-        recomputeVideoStatsFromDom();
-      }).withFailureHandler(function (err) {
-        showAlertModal('儲存影片失敗：' + err.message);
-      }).saveVideoUpload(payload);
-    }
-
-    function updateVideoStats(members, records) {
-      var byName = {}; (records || []).forEach(function (r) { byName[r.name] = r; });
-      var total = members.length, uploaded = 0, pub = 0;
-      members.forEach(function (m) {
-        var rec = byName[m.name];
-        if (rec && rec.url) { uploaded++; if (rec.visibility !== 'private') pub++; }
-      });
-      document.getElementById('video-stat-total').textContent = total;
-      document.getElementById('video-stat-uploaded').textContent = uploaded;
-      document.getElementById('video-stat-missing').textContent = total - uploaded;
-      document.getElementById('video-stat-public').textContent = pub;
-    }
-
-    // 存檔後即時從畫面重算統計，不用再打一次 API
-    function recomputeVideoStatsFromDom() {
-      var rows = Array.prototype.slice.call(document.querySelectorAll('#video-list .video-row'));
-      var total = rows.length, uploaded = 0, pub = 0;
-      rows.forEach(function (row) {
-        var input = row.querySelector('.video-url-input');
-        var vsel = row.querySelector('.video-vis-select');
-        if (!input) {
-          var t = row.querySelector('.video-col-time');
-          if (t && t.textContent.trim()) uploaded++; // 私人鎖住列：有時間＝已上傳（不計入公開）
-        } else if (input.value.trim()) {
-          uploaded++;
-          if (!vsel || vsel.value !== 'private') pub++;
-        }
-      });
-      document.getElementById('video-stat-total').textContent = total;
-      document.getElementById('video-stat-uploaded').textContent = uploaded;
-      document.getElementById('video-stat-missing').textContent = total - uploaded;
-      document.getElementById('video-stat-public').textContent = pub;
+      google.script.run.withSuccessHandler(function (logs) {
+        logs = logs || [];
+        if (logs.length === 0) { el.innerHTML = '<div class="activity-log-empty">目前沒有上傳記錄</div>'; return; }
+        el.innerHTML = logs.map(function (l) {
+          return '<div class="activity-log-row"><div class="activity-log-time">' + toTaipeiTime(l.time) + '</div><div class="activity-log-desc">' + l.description + '</div></div>';
+        }).join('');
+      }).withFailureHandler(function () {}).getVideoActivityLog();
     }
 
     function openAttendanceView() {
