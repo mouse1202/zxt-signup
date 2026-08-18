@@ -1042,6 +1042,12 @@
       cursor: not-allowed;
     }
 
+    .vr-action-btn {
+      flex: 0 0 auto;
+      align-self: flex-start;
+      padding: 12px 40px;
+    }
+
     .roster-export-btn {
       flex: 1;
       padding: 12px 0;
@@ -1774,7 +1780,7 @@
               <input type="text" id="vr-url2" class="vr-input" placeholder="請貼上第二場影片網址" />
             </div>
             <p class="vr-hint">YouTube 請設為「不公開」，不要設為「私人」；也支援一般雲端影片網址。</p>
-            <button type="button" class="roster-save-btn" id="vr-submit" onclick="submitVideoReport()">送出錄影回報</button>
+            <button type="button" class="roster-save-btn vr-action-btn" id="vr-submit" onclick="submitVideoReport()">影片上傳</button>
           </div>
         </div>
         <aside class="video-status-sidebar">
@@ -1782,7 +1788,7 @@
             <div class="roster-header"><span class="roster-title">我的繳交狀態</span></div>
             <div class="roster-body">
               <div class="vr-status-box" id="vr-status">先在左側選擇場次、職業與角色名稱，再按下查詢。</div>
-              <button type="button" class="roster-save-btn" id="vr-query" onclick="queryVideoStatus()">查詢是否已繳交</button>
+              <button type="button" class="roster-save-btn vr-action-btn" id="vr-query" onclick="queryVideoStatus()">查詢是否已繳交</button>
               <p class="vr-hint">查詢結果只顯示是否已交第一場或第二場，不會公開影片網址。</p>
             </div>
           </div>
@@ -4035,11 +4041,11 @@
       if (!(window.google && google.script && google.script.run)) { showAlertModal('本機預覽模式，無法送出'); return; }
       var btn = document.getElementById('vr-submit'); btn.disabled = true; btn.textContent = '送出中...';
       google.script.run.withSuccessHandler(function () {
-        btn.disabled = false; btn.textContent = '送出錄影回報';
+        btn.disabled = false; btn.textContent = '影片上傳';
         showAlertModal('已送出錄影回報！');
         document.getElementById('vr-status').innerHTML = '「' + name + '」（' + session + '）<br>第一場：<span class="' + (url1 ? 'vr-yes' : 'vr-no') + '">' + (url1 ? '已繳' : '未繳') + '</span><br>第二場：<span class="' + (url2 ? 'vr-yes' : 'vr-no') + '">' + (url2 ? '已繳' : '未繳') + '</span>';
       }).withFailureHandler(function (err) {
-        btn.disabled = false; btn.textContent = '送出錄影回報'; showAlertModal('送出失敗：' + err.message);
+        btn.disabled = false; btn.textContent = '影片上傳'; showAlertModal('送出失敗：' + err.message);
       }).saveVideoReport({ date: session, name: name, job: job, url1: url1, url2: url2, actorEmail: currentAccessEmail, actorRoleName: currentAccessRoleName });
     }
 
