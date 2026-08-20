@@ -43,11 +43,6 @@
       100% { transform: scale(1.12) translate(-1.5%, -1%); }
     }
 
-    /* 尊重使用者「減少動態效果」的系統設定 */
-    @media (prefers-reduced-motion: reduce) {
-      body::before { animation: none; }
-    }
-
     /* 飄雪／落櫻的畫布：疊在底圖之上、面板之下 */
     #fx-snow {
       position: fixed;
@@ -4955,9 +4950,7 @@
   <!-- 背景飄雪／落櫻花瓣特效（純前端 canvas，不需要任何素材檔） -->
   <script>
   (function () {
-    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduce) return; // 使用者要求減少動態效果就完全不啟用
-
+    // 依使用者要求：不論系統的「減少動態效果」設定為何，一律播放特效
     var canvas = document.getElementById('fx-snow');
     if (!canvas || !canvas.getContext) return;
     var ctx = canvas.getContext('2d');
