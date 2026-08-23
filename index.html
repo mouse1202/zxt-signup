@@ -1562,6 +1562,9 @@
     .vr-yes { color: #8bd17c; }
     .vr-no { color: #ff8a80; }
     .vr-link { color: #6fa8dc; text-decoration: underline; word-break: break-all; }
+    .vr-vis-tag { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 10px; margin-left: 4px; vertical-align: middle; }
+    .vr-vis-public { background: #123a1a; border: 1px solid #4caf50; color: #8bd17c; }
+    .vr-vis-private { background: #2a2340; border: 1px solid #7a6ab0; color: #c9bdf0; }
     .vr-status-line { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
     .vr-del-btn { background: #2a0a0a; border: 1px solid #FF0000; color: #ff8a80; border-radius: 6px; padding: 3px 12px; font-size: 12px; font-family: inherit; cursor: pointer; letter-spacing: 1px; }
     .vr-del-btn:hover { background: #4a0f0f; color: #ffb3ac; }
@@ -1801,6 +1804,13 @@
             <div class="vr-field">
               <label class="vr-label">第二場錄影網址</label>
               <input type="text" id="vr-url2" class="vr-input" placeholder="請貼上第二場影片網址" />
+            </div>
+            <div class="vr-field">
+              <label class="vr-label">影片顯示權限</label>
+              <select id="vr-visibility" class="vr-input">
+                <option value="private">私人（查詢只顯示有無繳交，不露出網址）</option>
+                <option value="public">公開（查詢時會顯示影片網址）</option>
+              </select>
             </div>
             <p class="vr-hint">YouTube 請設為「不公開」，不要設為「私人」；也支援一般雲端影片網址。</p>
             <button type="button" class="roster-save-btn vr-action-btn" id="vr-submit" onclick="submitVideoReport()">影片上傳</button>
@@ -4015,6 +4025,7 @@
       var nameSel = document.getElementById('vr-name'); nameSel.innerHTML = '<option value="">請先選擇職業</option>'; nameSel.disabled = true;
       document.getElementById('vr-url1').value = '';
       document.getElementById('vr-url2').value = '';
+      document.getElementById('vr-visibility').value = 'private';
       document.getElementById('vr-status').textContent = '先在左側選擇場次、職業與角色名稱，再按下查詢。';
     }
 
@@ -4061,6 +4072,7 @@
       var name = document.getElementById('vr-name').value;
       var url1 = document.getElementById('vr-url1').value.trim();
       var url2 = document.getElementById('vr-url2').value.trim();
+      var visibility = document.getElementById('vr-visibility').value === 'public' ? 'public' : 'private';
       if (!session) { showAlertModal('請選擇場次'); return; }
       if (!name) { showAlertModal('請選擇角色名稱'); return; }
       if (!url1 && !url2) { showAlertModal('請至少貼上一場的影片網址'); return; }
@@ -4069,23 +4081,40 @@
       google.script.run.withSuccessHandler(function () {
         btn.disabled = false; btn.textContent = '影片上傳';
         showAlertModal('已送出錄影回報！');
-        renderVrStatus(session, name, !!url1, !!url2);
+        var pub = visibility === 'public';
+        renderVrStatus(session, name, !!url1, !!url2, pub, pub ? url1 : '', pub ? url2 : '');
       }).withFailureHandler(function (err) {
         btn.disabled = false; btn.textContent = '影片上傳'; showAlertModal('送出失敗：' + err.message);
-      }).saveVideoReport({ date: session, name: name, job: job, url1: url1, url2: url2, actorEmail: currentAccessEmail, actorRoleName: currentAccessRoleName });
+      }).saveVideoReport({ date: session, name: name, job: job, url1: url1, url2: url2, visibility: visibility, actorEmail: currentAccessEmail, actorRoleName: currentAccessRoleName });
     }
 
-    // 統一渲染「我的繳交狀態」窗格；已繳的場次後面附上「刪除此影片」按鈕
-    function renderVrStatus(session, name, s1, s2) {
+    // 把網址安全放進 href（擋掉非 http(s) 的協定，避免 javascript: 之類）
+    function vrSafeHref(u) {
+      u = String(u || '');
+      if (!/^https?:\/\//i.test(u)) return '';
+      return u.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // 統一渲染「我的繳交狀態」窗格；公開才顯示「看影片」連結，已繳的場次附上「刪除此影片」按鈕
+    function renderVrStatus(session, name, s1, s2, isPublic, url1, url2) {
       vrStatusCtx = { session: session, name: name };
-      var h = '「' + name + '」（' + session + '）';
-      h += '<div class="vr-status-line">第一場：<span class="' + (s1 ? 'vr-yes' : 'vr-no') + '">' + (s1 ? '已繳' : '未繳') + '</span>';
-      if (s1) h += '<button type="button" class="vr-del-btn" onclick="deleteVideoUrl_(1)">刪除此影片</button>';
-      h += '</div>';
-      h += '<div class="vr-status-line">第二場：<span class="' + (s2 ? 'vr-yes' : 'vr-no') + '">' + (s2 ? '已繳' : '未繳') + '</span>';
-      if (s2) h += '<button type="button" class="vr-del-btn" onclick="deleteVideoUrl_(2)">刪除此影片</button>';
-      h += '</div>';
+      var tag = isPublic
+        ? ' <span class="vr-vis-tag vr-vis-public">公開</span>'
+        : ' <span class="vr-vis-tag vr-vis-private">私人</span>';
+      var h = '「' + name + '」（' + session + '）' + tag;
+      h += vrStatusLine('第一場', 1, s1, isPublic, url1);
+      h += vrStatusLine('第二場', 2, s2, isPublic, url2);
       document.getElementById('vr-status').innerHTML = h;
+    }
+    function vrStatusLine(label, which, submitted, isPublic, url) {
+      var s = '<div class="vr-status-line">' + label + '：<span class="' + (submitted ? 'vr-yes' : 'vr-no') + '">' + (submitted ? '已繳' : '未繳') + '</span>';
+      if (submitted && isPublic) {
+        var href = vrSafeHref(url);
+        if (href) s += '<a class="vr-link" href="' + href + '" target="_blank" rel="noopener">看影片</a>';
+      }
+      if (submitted) s += '<button type="button" class="vr-del-btn" onclick="deleteVideoUrl_(' + which + ')">刪除此影片</button>';
+      s += '</div>';
+      return s;
     }
 
     function deleteVideoUrl_(which) {
@@ -4114,7 +4143,10 @@
       box.textContent = '查詢中...';
       google.script.run.withSuccessHandler(function (res) {
         res = res || {};
-        renderVrStatus(session, name, !!res.s1, !!res.s2);
+        // 讓上傳表單的「公開/私人」下拉同步成目前儲存的設定，避免重新上傳時誤改回私人
+        var visSel = document.getElementById('vr-visibility');
+        if (visSel) visSel.value = res.isPublic ? 'public' : 'private';
+        renderVrStatus(session, name, !!res.s1, !!res.s2, !!res.isPublic, res.url1 || '', res.url2 || '');
       }).withFailureHandler(function (err) { box.textContent = '查詢失敗：' + err.message; }).getMyVideoStatus(session, name);
     }
 
