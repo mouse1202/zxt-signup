@@ -3155,14 +3155,30 @@
       exportBtn.disabled = true;
       exportBtn.textContent = '匯出中...';
 
+      // 用當天出勤名單建「名字→身分組」對照，匯出時幫外援/試訓的名字加上（外援）/（試訓）
+      // 註記，跟畫面上排表顯示（rosterDisplayName_）一致。
+      var exportCatMap = {};
+      (currentRosterAttendees || []).forEach(function (m) { exportCatMap[m.name] = m.category; });
+      function exportAnnotateName(name) {
+        if (!name) return name;
+        if (exportCatMap[name] === 'guest') return name + '（外援）';
+        if (exportCatMap[name] === 'trial') return name + '（試訓）';
+        return name;
+      }
       function buildSessionPayload(label, result) {
         result = result || {};
         var rows = result.rows || [];
+        var subs = buildExportSubstitutes(rows); // 先用「純名字」算出候補，再加註記，避免比對失準
         return {
           label: label,
-          rows: rows,
+          rows: rows.map(function (r) {
+            var c = {};
+            for (var k in r) { if (Object.prototype.hasOwnProperty.call(r, k)) c[k] = r[k]; }
+            c.name = exportAnnotateName(r.name);
+            return c;
+          }),
           commanders: result.commanders || [],
-          substitutes: buildExportSubstitutes(rows)
+          substitutes: subs.map(function (s) { return { name: exportAnnotateName(s.name), job: s.job }; })
         };
       }
 
