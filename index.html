@@ -919,6 +919,24 @@
       flex: 1;
     }
 
+    /* 標記「自己」那一列：姓名格加金框＋金色「你」徽章 */
+    .attendance-row-mine .attendance-name.attendance-name-display {
+      background: rgba(212, 168, 40, 0.20);
+      border-color: #d4a828;
+      color: #ffe9a8;
+      font-weight: 700;
+    }
+    .attendance-mine-badge {
+      margin-left: 6px;
+      font-size: 11px;
+      padding: 0 7px;
+      border-radius: 8px;
+      background: #d4a828;
+      color: #1a0e00;
+      font-weight: 700;
+      flex: 0 0 auto;
+    }
+
     .attendance-name:focus,
     .attendance-job:focus,
     .attendance-status:focus {
@@ -3249,10 +3267,40 @@
       var statusSelect = document.createElement('select');
       statusSelect.className = 'attendance-status';
       statusSelect.innerHTML = buildAttendanceStatusOptionsHtml();
+      statusSelect.dataset.prev = statusSelect.value; // 記住目前狀態，取消時可還原
       statusSelect.onchange = function () {
-        saveAttendanceStatus(name, job, statusSelect.value, true);
+        var newVal = statusSelect.value;
+        var prev = statusSelect.dataset.prev || '出勤';
+        var isMine = !!(currentAccessRoleName && name === currentAccessRoleName);
+        var isPrivileged = (currentAccessCategory === '管理' || currentAccessCategory === '文書');
+        // 改到「不是自己」的名字時，先還原畫面並跳確認框，避免誤點到別人
+        if (!isMine && !isPrivileged) {
+          statusSelect.value = prev;
+          updateAttendanceSummary();
+          var who = currentAccessRoleName ? '「' + currentAccessRoleName + '」' : '（尚未設定角色名）';
+          showConfirmModal('這不是你的名字',
+            '你登入的是' + who + '，但你正要修改「' + name + '」的出勤（改成「' + newVal + '」）。確定要幫別人修改嗎？',
+            function () {
+              statusSelect.value = newVal;
+              statusSelect.dataset.prev = newVal;
+              saveAttendanceStatus(name, job, newVal, true);
+              updateAttendanceSummary();
+            });
+          return;
+        }
+        statusSelect.dataset.prev = newVal;
+        saveAttendanceStatus(name, job, newVal, true);
         updateAttendanceSummary();
       };
+
+      // 把「自己」那一列標記出來，方便一眼找到
+      if (currentAccessRoleName && name === currentAccessRoleName) {
+        row.classList.add('attendance-row-mine');
+        var mineBadge = document.createElement('span');
+        mineBadge.className = 'attendance-mine-badge';
+        mineBadge.textContent = '你';
+        nameSpan.appendChild(mineBadge);
+      }
 
       row.appendChild(nameSpan);
       row.appendChild(jobSpan);
@@ -3893,7 +3941,9 @@
         rows.forEach(function (row) {
           var existing = statusMap[row.dataset.name];
           var status = existing || '出勤'; // 沒有存過紀錄的人預設顯示「出勤」（不再自動寫回後端）
-          row.querySelector('.attendance-status').value = status;
+          var sel = row.querySelector('.attendance-status');
+          sel.value = status;
+          sel.dataset.prev = status; // 同步「上一個狀態」，確認框取消時才能正確還原
         });
         updateAttendanceSummary();
       }
