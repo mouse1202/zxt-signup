@@ -1837,7 +1837,7 @@
                 <option value="public">公開（查詢時會顯示影片網址）</option>
               </select>
             </div>
-            <p class="vr-hint">只接受 YouTube 連結（youtube.com 或 youtu.be）。YouTube 請設為「不公開」，不要設為「私人」。</p>
+            <p class="vr-hint">只接受 YouTube 或 Twitch 連結。YouTube 請設為「不公開」，不要設為「私人」。</p>
             <button type="button" class="roster-save-btn vr-action-btn" id="vr-submit" onclick="submitVideoReport()">影片上傳</button>
           </div>
         </div>
@@ -4150,8 +4150,8 @@
       if (!name) { showAlertModal('請選擇角色名稱'); return; }
       if (!url1 && !url2) { showAlertModal('請至少貼上一場的影片網址'); return; }
       // 只接受 YouTube 連結，其他一律不給送出（避免有人貼非網址或非 YouTube 的東西）
-      if (url1 && !isYouTubeUrl_(url1)) { showAlertModal('第一場只接受 YouTube 連結（youtube.com 或 youtu.be），請貼正確的 YouTube 網址'); return; }
-      if (url2 && !isYouTubeUrl_(url2)) { showAlertModal('第二場只接受 YouTube 連結（youtube.com 或 youtu.be），請貼正確的 YouTube 網址'); return; }
+      if (url1 && !isAllowedVideoUrl_(url1)) { showAlertModal('第一場只接受 YouTube 或 Twitch 連結，請貼正確的網址'); return; }
+      if (url2 && !isAllowedVideoUrl_(url2)) { showAlertModal('第二場只接受 YouTube 或 Twitch 連結，請貼正確的網址'); return; }
       if (!(window.google && google.script && google.script.run)) { showAlertModal('本機預覽模式，無法送出'); return; }
       var btn = document.getElementById('vr-submit'); btn.disabled = true; btn.textContent = '送出中...';
       google.script.run.withSuccessHandler(function () {
@@ -4164,13 +4164,15 @@
       }).saveVideoReport({ date: session, name: name, job: job, url1: url1, url2: url2, visibility: visibility, actorEmail: currentAccessEmail, actorRoleName: currentAccessRoleName });
     }
 
-    // 只接受 YouTube 連結：youtube.com（含 www/m/live/watch 等）或短網址 youtu.be
-    function isYouTubeUrl_(u) {
+    // 只接受 YouTube 或 Twitch 連結（含各自子網域，如 www./m./clips.）
+    function isAllowedVideoUrl_(u) {
       u = String(u || '').trim();
       if (!/^https?:\/\//i.test(u)) return false;
       try {
         var host = new URL(u).hostname.toLowerCase();
-        return host === 'youtube.com' || host === 'youtu.be' || host.slice(-12) === '.youtube.com';
+        return host === 'youtube.com' || host.slice(-12) === '.youtube.com'
+          || host === 'youtu.be'
+          || host === 'twitch.tv' || host.slice(-10) === '.twitch.tv';
       } catch (e) { return false; }
     }
 
