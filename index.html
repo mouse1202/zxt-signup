@@ -224,6 +224,13 @@
       display: none;
     }
 
+    /* 通用隱藏工具：以往沒有這條全域規則，導致某些有自己 display 設定的元素
+       （例如 display:flex 的約戰公告編輯框、各種權限按鈕）加了 .hidden 也藏不住，
+       讓幫眾看得到／按得到不該操作的東西。用 !important 確保一律隱藏。 */
+    .hidden {
+      display: none !important;
+    }
+
     /* 切換畫面時的淡出／淡入轉場：先把目前畫面淡出，換完內容後再淡入 */
     .view.fade-out {
       opacity: 0;
@@ -2017,7 +2024,7 @@
           <div class="roster-body">
             <div id="announce-display" class="announce-display announce-empty">目前沒有公告</div>
             <div class="announce-edit clerk-admin-btn">
-              <textarea id="announce-input" class="announce-input" maxlength="2000" placeholder="輸入約戰公告…（只有管理看得到這個編輯框）"></textarea>
+              <textarea id="announce-input" class="announce-input" maxlength="2000" placeholder="輸入約戰公告…（只有管理／文書看得到這個編輯框）"></textarea>
               <button type="button" class="roster-save-btn" onclick="saveAnnouncementText()">儲存公告</button>
             </div>
           </div>
@@ -4329,6 +4336,11 @@
     }
 
     function saveAnnouncementText() {
+      // 權限守門：只有管理／文書能存公告（即使前端隱藏失效，也擋在這裡）
+      if (currentAccessCategory !== '管理' && currentAccessCategory !== '文書') {
+        showAlertModal('只有管理或文書才能編輯約戰公告');
+        return;
+      }
       var input = document.getElementById('announce-input');
       var text = input ? input.value : '';
       if (window.google && google.script && google.script.run) {
