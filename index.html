@@ -1892,6 +1892,8 @@
         </div>
         <div class="roster-body">
           <div class="attendance-date-row">
+            <label for="roster-month" class="attendance-date-label">月份：</label>
+            <select id="roster-month" class="attendance-date-input" onchange="onMonthFilterChange('roster')"></select>
             <label for="roster-date" class="attendance-date-label">日期：</label>
             <select id="roster-date" class="attendance-date-input" onchange="onRosterDateChange()"></select>
             <div class="roster-session-tabs">
@@ -1950,6 +1952,8 @@
         </div>
         <div class="roster-body">
           <div class="attendance-date-row">
+            <label for="attendance-month" class="attendance-date-label">月份：</label>
+            <select id="attendance-month" class="attendance-date-input" onchange="onMonthFilterChange('attendance')"></select>
             <label for="attendance-date" class="attendance-date-label">日期：</label>
             <select id="attendance-date" class="attendance-date-input" onchange="onAttendanceDateChange()"></select>
             <button type="button" class="roster-back-btn admin-only-btn hidden" onclick="openPasswordGate(renameCurrentDateLabel, 'attendance-view', false)">重新命名</button>
@@ -3354,6 +3358,53 @@
       if (rosterDateInput) rosterDateInput.value = value;
     }
 
+    // ── 月份分頁：日期下拉先用「月份」過濾，日期一多才不會一長串 ──
+    var sharedMonth = '';                 // 目前選到的月份（'08'、'09'…或 __OTHER__）
+    var OTHER_MONTH_VALUE = '__OTHER__';  // 開頭不是 MMDD 的標籤歸這一組
+
+    function monthKeyOf_(label) {
+      var v = parseSortableMMDD_(label);
+      if (v === null) return OTHER_MONTH_VALUE;
+      var mo = Math.floor(v / 100);
+      return (mo < 10 ? '0' : '') + mo;
+    }
+    function monthLabelText_(key) {
+      return key === OTHER_MONTH_VALUE ? '其他' : (key + '月');
+    }
+    // 從所有標籤取出「有資料的月份」，由小到大排序（其他排最後）
+    function distinctMonthsAsc_(labels) {
+      var seen = {}, hasOther = false, arr = [];
+      (labels || []).forEach(function (l) {
+        var k = monthKeyOf_(l);
+        if (k === OTHER_MONTH_VALUE) { hasOther = true; return; }
+        if (!seen[k]) { seen[k] = true; arr.push(k); }
+      });
+      arr.sort();
+      if (hasOther) arr.push(OTHER_MONTH_VALUE);
+      return arr;
+    }
+    function labelsInMonth_(month) {
+      return sortDateLabelsAscending_(knownDateLabels).filter(function (l) { return monthKeyOf_(l) === month; });
+    }
+    // 使用者換月份：日期下拉換成那個月，並自動選那個月「最新」的一天重新載入
+    function onMonthFilterChange(which) {
+      var month = document.getElementById(which === 'roster' ? 'roster-month' : 'attendance-month').value;
+      if (which === 'roster') flushPendingRosterSave(getSharedDate());
+      sharedMonth = month;
+      refreshDateSelectOptions();
+      var labels = labelsInMonth_(month);
+      var target = labels.length ? labels[labels.length - 1] : '';
+      if (target) setSharedDate(target);
+      if (which === 'roster') {
+        var date = getSharedDate();
+        if (date) loadRosterAttendeesForDate(date, function () { applyRosterDataForDate(date, currentRosterSession); });
+      } else {
+        applyAttendanceStatusesForDate(getSharedDate());
+        var dr = document.getElementById('attendance-deadline-row'); if (dr) dr.classList.add('hidden');
+        refreshAttendanceLockForToday();
+      }
+    }
+
     // 日期/場次改成下拉選單，選項＝歷來出勤系統跟排表工具用過的所有標籤，
     // 兩邊選單共用同一份清單，並提供「＋ 新增日期／場次」選項來建立新的一天。
     var knownDateLabels = [];
@@ -3408,16 +3459,29 @@
     };
 
     function refreshDateSelectOptions() {
+      var months = distinctMonthsAsc_(knownDateLabels);
+      // 決定目前月份：sharedMonth 失效時，改用目前日期的月份，再不行就用最新的月份
+      if (months.indexOf(sharedMonth) === -1) {
+        var byDate = monthKeyOf_(sharedDate);
+        sharedMonth = (months.indexOf(byDate) !== -1) ? byDate : (months.length ? months[months.length - 1] : '');
+      }
+      // 月份下拉（出勤、排表共用同一份月份清單）
+      var monthHtml = months.map(function (k) { return '<option value="' + k + '">' + monthLabelText_(k) + '</option>'; }).join('');
+      ['attendance-month', 'roster-month'].forEach(function (id) {
+        var sel = document.getElementById(id);
+        if (!sel) return;
+        sel.innerHTML = monthHtml;
+        if (sharedMonth) sel.value = sharedMonth;
+      });
+      // 日期下拉：只放目前月份的日期（由小到大排序；同日多場次再依字母）
+      var labelsForMonth = labelsInMonth_(sharedMonth);
       ['attendance-date', 'roster-date'].forEach(function (id) {
         var select = document.getElementById(id);
         if (!select) return;
         var currentValue = select.value;
-        // 出勤系統與排表工具的日期選單都依日期由小到大排序（同日多場次再依字母）。
-        var labelsForThisSelect = sortDateLabelsAscending_(knownDateLabels);
-        select.innerHTML = buildDateOptionsHtml(labelsForThisSelect, DATE_SELECT_ALLOW_ADD[id]);
-        if (currentValue && knownDateLabels.indexOf(currentValue) !== -1) {
-          select.value = currentValue;
-        }
+        select.innerHTML = buildDateOptionsHtml(labelsForMonth, DATE_SELECT_ALLOW_ADD[id]);
+        if (currentValue && labelsForMonth.indexOf(currentValue) !== -1) select.value = currentValue;
+        else if (sharedDate && labelsForMonth.indexOf(sharedDate) !== -1) select.value = sharedDate;
       });
     }
 
@@ -3426,6 +3490,7 @@
       if (knownDateLabels.indexOf(label) === -1) {
         knownDateLabels.unshift(label);
       }
+      sharedMonth = monthKeyOf_(label); // 切到新標籤所在的月份，才看得到它
       refreshDateSelectOptions();
     }
 
@@ -3532,6 +3597,8 @@
           } else {
             knownDateLabels.unshift(newDate);
           }
+          if (getSharedDate() === oldDate) sharedDate = newDate;
+          sharedMonth = monthKeyOf_(getSharedDate()); // 改名可能換了月份，跟著切過去
           refreshDateSelectOptions();
 
           if (getSharedDate() === oldDate) setSharedDate(newDate);
@@ -4394,6 +4461,7 @@
           // 看起來就像沒刪掉一樣。清空共用日期，讓 ensureDateLabelsLoaded 自己挑一個還存在的標籤
           // （清單全空的話會跳出新增視窗，不會自動幫忙選日期）。
           sharedDate = '';
+          sharedMonth = ''; // 一併重置月份，讓 refreshDateSelectOptions 依新的最新日期重新決定
           dateLabelsLoaded = false; // 讓下拉選單重新抓一次最新清單（這個標籤現在應該會消失）
           ensureDateLabelsLoaded(function () {
             document.getElementById('attendance-date').value = getSharedDate();
