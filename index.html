@@ -1642,7 +1642,7 @@
 <script>
 (function () {
   var API = 'https://xltdagmzsycnqbflovff.supabase.co/functions/v1/zxtapi';
-  var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster','getAnnouncement','saveAnnouncement','addDateLabel','deleteAccessRequest','purgeRejected','saveVideoReport','getMyVideoStatus','deleteVideoUrl','getVideoRoster','getVideoActivityLog'];
+  var FNS = ['getMemberList','saveMemberList','getGuestList','saveGuestList','getTrialList','saveTrialList','getAttendanceCandidates','checkAccessStatus','submitAccessRequest','addAccessMember','getAllAccessRequests','setAccessRequestStatus','setAccessRequestCategory','getAttendanceDeadline','saveAttendanceDeadlineTime','clearAttendanceDeadlineTime','setAttendanceTempUnlock','getAttendanceTempUnlockUntil','getAllDateLabels','getAttendanceByDate','getRosterAttendeesForDate','saveAttendanceRecord','deleteAllRecordsForDate','renameDateLabel','getActivityLog','saveRoster','getRosterByDate','getCommandersByDate','getRosterWithFallback','getAttendanceMonthOptions','exportAttendanceAll','exportRoster','getAnnouncement','saveAnnouncement','getMonthTabs','saveMonthTabs','addDateLabel','deleteAccessRequest','purgeRejected','saveVideoReport','getMyVideoStatus','deleteVideoUrl','getVideoRoster','getVideoActivityLog'];
 
   var JOB_COLORS = { '鐵衣':'e69138','血河':'cc0000','神相':'6fa8dc','素問':'f4cccc','九靈':'d9d2e9','碎夢':'4dd0e1','龍吟':'93c47d','玄機':'ffe599','潮光':'3c78d8' };
   var GROUP_BANNER = { '團一進攻':{bg:'1c4587',fg:'ffffff'}, '團二進攻':{bg:'990000',fg:'ffffff'}, '防守團':{bg:'f1c232',fg:'000000'} };
@@ -3358,59 +3358,124 @@
       if (rosterDateInput) rosterDateInput.value = value;
     }
 
-    // ── 月份分頁：日期下拉先用「月份」過濾，日期一多才不會一長串 ──
-    var sharedMonth = '';                 // 目前選到的月份（'08'、'09'…或 __OTHER__）
+    // ── 月份分頁（含民國年）：日期下拉先用「月份」過濾，日期一多才不會一長串 ──
+    // 月份用「絕對月份索引」表示：idx = 民國年*12 + (月-1)。例如 115年08月 = 115*12+7 = 1387。
+    // 這份清單存在後端（app_settings.month_tabs），可「＋新增月份」往後加，跨年自動進位（115/12→116/01）。
+    var DEFAULT_ROC_YEAR = 115;           // 沒有年份資訊的現有月份一律先當作民國 115 年
     var OTHER_MONTH_VALUE = '__OTHER__';  // 開頭不是 MMDD 的標籤歸這一組
+    var ADD_MONTH_VALUE = '__addmonth__'; // 月份下拉最後的「＋ 新增月份」選項
+    var monthTabs = [];                   // 由小到大的絕對月份索引清單
+    var monthTabsLoaded = false;
+    var sharedMonthIdx = null;            // 目前選到的月份（數字索引，或 OTHER_MONTH_VALUE）
 
-    function monthKeyOf_(label) {
+    function romMonthNum_(idx) { return idx % 12 + 1; }        // 1~12
+    function romYear_(idx) { return Math.floor(idx / 12); }    // 民國年
+    function idxOf_(y, m) { return y * 12 + (m - 1); }
+    function monthTabText_(idx) {
+      var m = romMonthNum_(idx);
+      return romYear_(idx) + '年' + (m < 10 ? '0' : '') + m + '月';
+    }
+    // 標籤的「月份數字」(1~12)；開頭不是合法 MMDD 回 null
+    function labelMonthNum_(label) {
       var v = parseSortableMMDD_(label);
-      if (v === null) return OTHER_MONTH_VALUE;
-      var mo = Math.floor(v / 100);
-      return (mo < 10 ? '0' : '') + mo;
+      return v === null ? null : Math.floor(v / 100);
     }
-    function monthLabelText_(key) {
-      return key === OTHER_MONTH_VALUE ? '其他' : (key + '月');
+    function hasOtherLabels_() {
+      return (knownDateLabels || []).some(function (l) { return labelMonthNum_(l) === null; });
     }
-    // 從所有標籤取出「有資料的月份」，由小到大排序（其他排最後）
-    function distinctMonthsAsc_(labels) {
-      var seen = {}, hasOther = false, arr = [];
-      (labels || []).forEach(function (l) {
-        var k = monthKeyOf_(l);
-        if (k === OTHER_MONTH_VALUE) { hasOther = true; return; }
-        if (!seen[k]) { seen[k] = true; arr.push(k); }
+    // 找「月份數字 == mm」的分頁；有多個時取年份最新的那個
+    function tabForMonthNum_(mm) {
+      for (var i = monthTabs.length - 1; i >= 0; i--) {
+        if (romMonthNum_(monthTabs[i]) === mm) return monthTabs[i];
+      }
+      return null;
+    }
+    // 確保「有日期的月份數字」都至少有一個分頁；缺的用預設年份補上。回傳是否有新增。
+    function ensureMonthTabsSeeded_() {
+      var have = {};
+      monthTabs.forEach(function (idx) { have[romMonthNum_(idx)] = true; });
+      var added = false;
+      (knownDateLabels || []).forEach(function (l) {
+        var mm = labelMonthNum_(l);
+        if (mm !== null && !have[mm]) { monthTabs.push(idxOf_(DEFAULT_ROC_YEAR, mm)); have[mm] = true; added = true; }
       });
-      arr.sort();
-      if (hasOther) arr.push(OTHER_MONTH_VALUE);
-      return arr;
+      monthTabs.sort(function (a, b) { return a - b; });
+      return added;
     }
-    function labelsInMonth_(month) {
-      return sortDateLabelsAscending_(knownDateLabels).filter(function (l) { return monthKeyOf_(l) === month; });
+    function persistMonthTabs_() {
+      if (window.google && google.script && google.script.run) {
+        google.script.run.withFailureHandler(function (err) { console.log('儲存月份分頁失敗：' + err.message); }).saveMonthTabs(monthTabs);
+      }
+    }
+    function loadMonthTabsThen_(cb) {
+      function afterTabs(tabs) {
+        monthTabs = (tabs || []).slice().filter(function (n) { return typeof n === 'number'; }).sort(function (a, b) { return a - b; });
+        if (ensureMonthTabsSeeded_()) persistMonthTabs_();
+        cb();
+      }
+      if (monthTabsLoaded) { afterTabs(monthTabs); return; }
+      if (window.google && google.script && google.script.run) {
+        google.script.run.withSuccessHandler(function (tabs) { monthTabsLoaded = true; afterTabs(tabs); })
+          .withFailureHandler(function () { monthTabsLoaded = true; afterTabs([]); })
+          .getMonthTabs();
+      } else { monthTabsLoaded = true; afterTabs([]); }
+    }
+    // 目前月份的日期（升冪；其他組＝開頭非數字的標籤）
+    function labelsInMonthIdx_(sel) {
+      var sorted = sortDateLabelsAscending_(knownDateLabels);
+      if (sel === OTHER_MONTH_VALUE) return sorted.filter(function (l) { return labelMonthNum_(l) === null; });
+      if (typeof sel !== 'number') return [];
+      var mm = romMonthNum_(sel);
+      return sorted.filter(function (l) { return labelMonthNum_(l) === mm; });
     }
     // 取「日期最新」（MMDD 最大）的標籤當預設；全都沒日期時退回第一個
     function latestDatedLabel_(labels) {
       var sorted = sortDateLabelsAscending_(labels);
       for (var i = sorted.length - 1; i >= 0; i--) {
-        if (monthKeyOf_(sorted[i]) !== OTHER_MONTH_VALUE) return sorted[i];
+        if (labelMonthNum_(sorted[i]) !== null) return sorted[i];
       }
       return sorted.length ? sorted[0] : '';
     }
-    // 使用者換月份：日期下拉換成那個月，並自動選那個月「最新」的一天重新載入
-    function onMonthFilterChange(which) {
-      var month = document.getElementById(which === 'roster' ? 'roster-month' : 'attendance-month').value;
-      if (which === 'roster') flushPendingRosterSave(getSharedDate());
-      sharedMonth = month;
-      refreshDateSelectOptions();
-      var labels = labelsInMonth_(month);
-      var target = labels.length ? labels[labels.length - 1] : '';
-      if (target) setSharedDate(target);
+    // 依目前的 sharedDate 把月份分頁對過去（新增/改名日期後用）
+    function syncMonthToDate_() {
+      if (ensureMonthTabsSeeded_()) persistMonthTabs_();
+      var mm = labelMonthNum_(sharedDate);
+      if (mm === null) { sharedMonthIdx = hasOtherLabels_() ? OTHER_MONTH_VALUE : (monthTabs.length ? monthTabs[monthTabs.length - 1] : null); return; }
+      var t = tabForMonthNum_(mm);
+      sharedMonthIdx = (t !== null) ? t : (monthTabs.length ? monthTabs[monthTabs.length - 1] : null);
+    }
+    function reloadActiveDateView_(which) {
+      var date = getSharedDate();
       if (which === 'roster') {
-        var date = getSharedDate();
         if (date) loadRosterAttendeesForDate(date, function () { applyRosterDataForDate(date, currentRosterSession); });
       } else {
-        applyAttendanceStatusesForDate(getSharedDate());
+        applyAttendanceStatusesForDate(date);
         var dr = document.getElementById('attendance-deadline-row'); if (dr) dr.classList.add('hidden');
         refreshAttendanceLockForToday();
       }
+    }
+    // 「＋ 新增月份」：在目前最新月份後面加下一個月，跨年自動進位（115/12→116/01）
+    function addNextMonthTab_(which) {
+      var next = monthTabs.length ? (monthTabs[monthTabs.length - 1] + 1) : idxOf_(DEFAULT_ROC_YEAR, 1);
+      monthTabs.push(next);
+      monthTabs.sort(function (a, b) { return a - b; });
+      persistMonthTabs_();
+      sharedMonthIdx = next;
+      refreshDateSelectOptions();
+      setSharedDate(''); // 新月份還沒有日期
+      showAlertModal('已新增「' + monthTabText_(next) + '」。要建立那個月的場次，請在下面「日期」選「＋ 新增日期／場次」。');
+      reloadActiveDateView_(which);
+    }
+    // 使用者換月份：日期下拉換成那個月，並自動選那個月「最新」的一天重新載入
+    function onMonthFilterChange(which) {
+      var raw = document.getElementById(which === 'roster' ? 'roster-month' : 'attendance-month').value;
+      if (raw === ADD_MONTH_VALUE) { addNextMonthTab_(which); return; }
+      if (which === 'roster') flushPendingRosterSave(getSharedDate());
+      sharedMonthIdx = (raw === OTHER_MONTH_VALUE) ? OTHER_MONTH_VALUE : parseInt(raw, 10);
+      refreshDateSelectOptions();
+      var labels = labelsInMonthIdx_(sharedMonthIdx);
+      setSharedDate(labels.length ? labels[labels.length - 1] : '');
+      reloadActiveDateView_(which);
     }
 
     // 日期/場次改成下拉選單，選項＝歷來出勤系統跟排表工具用過的所有標籤，
@@ -3467,22 +3532,24 @@
     };
 
     function refreshDateSelectOptions() {
-      var months = distinctMonthsAsc_(knownDateLabels);
-      // 決定目前月份：sharedMonth 失效時，改用目前日期的月份，再不行就用最新的月份
-      if (months.indexOf(sharedMonth) === -1) {
-        var byDate = monthKeyOf_(sharedDate);
-        sharedMonth = (months.indexOf(byDate) !== -1) ? byDate : (months.length ? months[months.length - 1] : '');
-      }
-      // 月份下拉（出勤、排表共用同一份月份清單）
-      var monthHtml = months.map(function (k) { return '<option value="' + k + '">' + monthLabelText_(k) + '</option>'; }).join('');
+      // 確認目前選到的月份分頁仍有效；失效時改用目前日期的月份，再不行用最新月份
+      var validOther = (sharedMonthIdx === OTHER_MONTH_VALUE && hasOtherLabels_());
+      var validNum = (typeof sharedMonthIdx === 'number' && monthTabs.indexOf(sharedMonthIdx) !== -1);
+      if (!validOther && !validNum) syncMonthToDate_();
+
+      // 月份下拉（出勤、排表共用）：各分頁 + 其他（若有）+ ＋新增月份
+      var monthHtml = monthTabs.map(function (idx) { return '<option value="' + idx + '">' + monthTabText_(idx) + '</option>'; }).join('');
+      if (hasOtherLabels_()) monthHtml += '<option value="' + OTHER_MONTH_VALUE + '">其他</option>';
+      monthHtml += '<option value="' + ADD_MONTH_VALUE + '">＋ 新增月份</option>';
       ['attendance-month', 'roster-month'].forEach(function (id) {
         var sel = document.getElementById(id);
         if (!sel) return;
         sel.innerHTML = monthHtml;
-        if (sharedMonth) sel.value = sharedMonth;
+        if (sharedMonthIdx !== null) sel.value = String(sharedMonthIdx);
       });
-      // 日期下拉：只放目前月份的日期（由小到大排序；同日多場次再依字母）
-      var labelsForMonth = labelsInMonth_(sharedMonth);
+
+      // 日期下拉：只放目前月份分頁的日期（由小到大；同日多場次再依字母）
+      var labelsForMonth = labelsInMonthIdx_(sharedMonthIdx);
       ['attendance-date', 'roster-date'].forEach(function (id) {
         var select = document.getElementById(id);
         if (!select) return;
@@ -3493,12 +3560,15 @@
       });
     }
 
-    // 新增一個日期/場次標籤，加進共用清單並讓兩邊選單都看得到（放最前面，最新的在最上面）
+    // 新增一個日期/場次標籤，加進共用清單並切到它所在的月份分頁
     function addDateLabelToSelects(label) {
       if (knownDateLabels.indexOf(label) === -1) {
         knownDateLabels.unshift(label);
       }
-      sharedMonth = monthKeyOf_(label); // 切到新標籤所在的月份，才看得到它
+      if (ensureMonthTabsSeeded_()) persistMonthTabs_(); // 新月份數字自動補一個分頁
+      var mm = labelMonthNum_(label);
+      var t = mm !== null ? tabForMonthNum_(mm) : null;
+      sharedMonthIdx = (t !== null) ? t : (mm === null ? OTHER_MONTH_VALUE : sharedMonthIdx);
       refreshDateSelectOptions();
     }
 
@@ -3606,7 +3676,7 @@
             knownDateLabels.unshift(newDate);
           }
           if (getSharedDate() === oldDate) sharedDate = newDate;
-          sharedMonth = monthKeyOf_(getSharedDate()); // 改名可能換了月份，跟著切過去
+          syncMonthToDate_(); // 改名可能換了月份，跟著切過去
           refreshDateSelectOptions();
 
           if (getSharedDate() === oldDate) setSharedDate(newDate);
@@ -3687,8 +3757,10 @@
 
       function finishApply() {
         dateLabelsLoaded = true;
-        refreshDateSelectOptions();
-        if (callback) callback();
+        loadMonthTabsThen_(function () { // 先把月份分頁清單（含民國年）載進來/種好，再建選單
+          refreshDateSelectOptions();
+          if (callback) callback();
+        });
       }
 
       function apply(labels) {
@@ -4469,7 +4541,7 @@
           // 看起來就像沒刪掉一樣。清空共用日期，讓 ensureDateLabelsLoaded 自己挑一個還存在的標籤
           // （清單全空的話會跳出新增視窗，不會自動幫忙選日期）。
           sharedDate = '';
-          sharedMonth = ''; // 一併重置月份，讓 refreshDateSelectOptions 依新的最新日期重新決定
+          sharedMonthIdx = null; // 一併重置月份，讓 refreshDateSelectOptions 依新的最新日期重新決定
           dateLabelsLoaded = false; // 讓下拉選單重新抓一次最新清單（這個標籤現在應該會消失）
           ensureDateLabelsLoaded(function () {
             document.getElementById('attendance-date').value = getSharedDate();
