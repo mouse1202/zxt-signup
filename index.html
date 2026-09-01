@@ -3386,6 +3386,14 @@
     function labelsInMonth_(month) {
       return sortDateLabelsAscending_(knownDateLabels).filter(function (l) { return monthKeyOf_(l) === month; });
     }
+    // 取「日期最新」（MMDD 最大）的標籤當預設；全都沒日期時退回第一個
+    function latestDatedLabel_(labels) {
+      var sorted = sortDateLabelsAscending_(labels);
+      for (var i = sorted.length - 1; i >= 0; i--) {
+        if (monthKeyOf_(sorted[i]) !== OTHER_MONTH_VALUE) return sorted[i];
+      }
+      return sorted.length ? sorted[0] : '';
+    }
     // 使用者換月份：日期下拉換成那個月，並自動選那個月「最新」的一天重新載入
     function onMonthFilterChange(which) {
       var month = document.getElementById(which === 'roster' ? 'roster-month' : 'attendance-month').value;
@@ -3688,7 +3696,7 @@
 
         if (knownDateLabels.indexOf(sharedDate) === -1) {
           if (knownDateLabels.length > 0) {
-            sharedDate = knownDateLabels[0];
+            sharedDate = latestDatedLabel_(knownDateLabels); // 預設停在日期最新的那天（連帶月份也是最新）
             finishApply();
           } else if (allowCreate) {
             promptForNewDateLabel(function (newLabel) {
