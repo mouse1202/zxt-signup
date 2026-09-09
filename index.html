@@ -2280,6 +2280,8 @@
       Array.prototype.slice.call(document.querySelectorAll('.export-allowed-btn, .clerk-admin-btn')).forEach(function (btn) {
         btn.classList.toggle('hidden', !canExport);
       });
+      // 日期/月份下拉的「＋新增」選項只給管理，身分確定後若日期清單已載入就重建一次
+      if (typeof dateLabelsLoaded !== 'undefined' && dateLabelsLoaded) refreshDateSelectOptions();
     }
 
     var ATTENDANCE_STATUS_OPTIONS = ['出勤', '請假', '臨時請假'];
