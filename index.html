@@ -3469,7 +3469,15 @@
     // 使用者換月份：日期下拉換成那個月，並自動選那個月「最新」的一天重新載入
     function onMonthFilterChange(which) {
       var raw = document.getElementById(which === 'roster' ? 'roster-month' : 'attendance-month').value;
-      if (raw === ADD_MONTH_VALUE) { addNextMonthTab_(which); return; }
+      if (raw === ADD_MONTH_VALUE) {
+        if (currentAccessCategory !== '管理') {
+          showAlertModal('只有管理才能新增月份');
+          document.getElementById(which === 'roster' ? 'roster-month' : 'attendance-month').value = (sharedMonthIdx !== null ? String(sharedMonthIdx) : '');
+          return;
+        }
+        addNextMonthTab_(which);
+        return;
+      }
       if (which === 'roster') flushPendingRosterSave(getSharedDate());
       sharedMonthIdx = (raw === OTHER_MONTH_VALUE) ? OTHER_MONTH_VALUE : parseInt(raw, 10);
       refreshDateSelectOptions();
@@ -3537,10 +3545,11 @@
       var validNum = (typeof sharedMonthIdx === 'number' && monthTabs.indexOf(sharedMonthIdx) !== -1);
       if (!validOther && !validNum) syncMonthToDate_();
 
-      // 月份下拉（出勤、排表共用）：各分頁 + 其他（若有）+ ＋新增月份
+      // 月份下拉（出勤、排表共用）：各分頁 + 其他（若有）+ ＋新增月份（只有管理看得到）
+      var isAdminForAdd = (currentAccessCategory === '管理');
       var monthHtml = monthTabs.map(function (idx) { return '<option value="' + idx + '">' + monthTabText_(idx) + '</option>'; }).join('');
       if (hasOtherLabels_()) monthHtml += '<option value="' + OTHER_MONTH_VALUE + '">其他</option>';
-      monthHtml += '<option value="' + ADD_MONTH_VALUE + '">＋ 新增月份</option>';
+      if (isAdminForAdd) monthHtml += '<option value="' + ADD_MONTH_VALUE + '">＋ 新增月份</option>';
       ['attendance-month', 'roster-month'].forEach(function (id) {
         var sel = document.getElementById(id);
         if (!sel) return;
@@ -3554,7 +3563,7 @@
         var select = document.getElementById(id);
         if (!select) return;
         var currentValue = select.value;
-        select.innerHTML = buildDateOptionsHtml(labelsForMonth, DATE_SELECT_ALLOW_ADD[id]);
+        select.innerHTML = buildDateOptionsHtml(labelsForMonth, DATE_SELECT_ALLOW_ADD[id] && isAdminForAdd);
         if (currentValue && labelsForMonth.indexOf(currentValue) !== -1) select.value = currentValue;
         else if (sharedDate && labelsForMonth.indexOf(sharedDate) !== -1) select.value = sharedDate;
       });
@@ -3800,6 +3809,13 @@
     // handled === false 表示這次選到的本來就不是「＋ 新增日期／場次」，呼叫端要繼續原本的流程。
     function handleNewDateLabelSelection(select, callback) {
       if (select.value !== NEW_DATE_LABEL_VALUE) { callback(false); return; }
+
+      if (currentAccessCategory !== '管理') { // 只有管理能新增日期／場次
+        showAlertModal('只有管理才能新增日期／場次');
+        select.value = getSharedDate();
+        callback(true);
+        return;
+      }
 
       promptForNewDateLabel(function (newLabel) {
         if (!newLabel) {
