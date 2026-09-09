@@ -1935,6 +1935,10 @@
                 <div class="roster-substitutes-title">候補<span id="roster-substitutes-count"></span></div>
                 <div class="roster-substitutes-list" id="roster-substitutes-list"></div>
               </div>
+              <div class="roster-substitutes-panel roster-substitutes-panel-tall">
+                <div class="roster-substitutes-title">二職候補<span id="roster-second-substitutes-count"></span></div>
+                <div class="roster-substitutes-list" id="roster-second-substitutes-list"></div>
+              </div>
             </div>
           </div>
         </div>
@@ -2003,6 +2007,7 @@
             <span class="attendance-col-job">職業
               <select id="attendance-job-filter" class="attendance-job-filter" onchange="applyAttendanceJobFilter()"></select>
             </span>
+            <span class="attendance-col-job">二職</span>
             <span class="attendance-col-status">是否出勤</span>
           </div>
           <div class="attendance-list" id="attendance-list"></div>
@@ -2500,23 +2505,59 @@
       return m.name;
     }
 
-    function buildRosterNameOptionsHtml(job, excludeNames) {
+    // 判斷某格（姓名 + 這格職業）是不是「用二職排上」：這個人主職不是這格職業、但二職是。
+    function isSecondPlacement_(name, slotJob) {
+      if (!name || !slotJob) return false;
+      var m = currentRosterAttendees.filter(function (x) { return x.name === name; })[0];
+      if (!m) return false;
+      return m.job2 && m.job2 === slotJob && m.job !== slotJob;
+    }
+    // 目前表單裡「用二職排上」的人名清單
+    function getSecondPlacedNames() {
+      var rows = Array.prototype.slice.call(document.querySelectorAll('#roster-list .roster-person-row'));
+      var out = [];
+      rows.forEach(function (row) {
+        var name = row.querySelector('.roster-name').value;
+        var job = row.querySelector('.roster-job').value;
+        if (name && isSecondPlacement_(name, job)) out.push(name);
+      });
+      return out;
+    }
+
+    // 姓名選項：主職==這格職業的人（正常顯示）＋ 二職==這格職業的人（標「（二職）」）。
+    // excludeMainNames＝已排上的人（主職選項排掉，保持乾淨）；excludeSecondNames＝已用二職排上的人。
+    // 主職已排上的人「仍會」出現在二職選項裡（讓指揮看得到、選了會被防呆擋下）。
+    function buildRosterNameOptionsHtml(job, excludeMainNames, excludeSecondNames) {
       var html = '<option value=""></option>';
-      // 用「消耗一個名額」的方式排除：萬一剛好有兩個人同名，只會排除掉其中一個名額，
-      // 不會因為同名就把所有同名的人一次都排除掉。
-      var remaining = excludeNames ? excludeNames.slice() : null;
+      // 用「消耗一個名額」的方式排除：萬一剛好有兩個人同名，只會排除掉其中一個名額。
+      var remMain = excludeMainNames ? excludeMainNames.slice() : null;
       currentRosterAttendees
         .filter(function (m) { return !job || m.job === job; })
         .filter(function (m) {
-          if (!remaining) return true;
-          var idx = remaining.indexOf(m.name);
+          if (!remMain) return true;
+          var idx = remMain.indexOf(m.name);
           if (idx === -1) return true;
-          remaining.splice(idx, 1);
+          remMain.splice(idx, 1);
           return false;
         })
         .forEach(function (m) {
           html += '<option value="' + m.name + '">' + rosterDisplayName_(m) + '</option>';
         });
+      if (job) {
+        var remSecond = excludeSecondNames ? excludeSecondNames.slice() : null;
+        currentRosterAttendees
+          .filter(function (m) { return m.job2 && m.job2 === job && m.job2 !== m.job; })
+          .filter(function (m) {
+            if (!remSecond) return true;
+            var idx = remSecond.indexOf(m.name);
+            if (idx === -1) return true;
+            remSecond.splice(idx, 1);
+            return false;
+          })
+          .forEach(function (m) {
+            html += '<option value="' + m.name + '" data-second="1">' + m.name + '（二職）</option>';
+          });
+      }
       return html;
     }
 
@@ -2535,14 +2576,15 @@
       var nameSelect = row.querySelector('.roster-name');
       var currentValue = nameSelect.value;
       var baseNames = allSelectedNames || getAllRosterNameValues();
-      var excludeNames = baseNames.filter(function (v) { return v !== currentValue; });
+      var excludeMain = baseNames.filter(function (v) { return v !== currentValue; });
+      var excludeSecond = getSecondPlacedNames().filter(function (v) { return v !== currentValue; });
 
-      nameSelect.innerHTML = buildRosterNameOptionsHtml(jobSelect.value, excludeNames);
+      nameSelect.innerHTML = buildRosterNameOptionsHtml(jobSelect.value, excludeMain, excludeSecond);
 
       var stillValid = currentRosterAttendees.some(function (m) {
         return m.name === currentValue &&
-          (!jobSelect.value || m.job === jobSelect.value) &&
-          excludeNames.indexOf(currentValue) === -1;
+          (!jobSelect.value || m.job === jobSelect.value || (m.job2 === jobSelect.value && m.job2 !== m.job)) &&
+          excludeMain.indexOf(currentValue) === -1;
       });
       nameSelect.value = stillValid ? currentValue : '';
 
@@ -2687,6 +2729,19 @@
 
       // 姓名如果是在職業還沒選的情況下直接挑的，順便把職業帶出來，方便對照
       nameSelect.onchange = function () {
+        var picked = nameSelect.value;
+        // 防呆：一個人只能排一格。若這個人已經在別格（含主職／二職），跳提醒並清掉這格。
+        if (picked) {
+          var dupCount = getAllRosterNameValues().filter(function (v) { return v === picked; }).length;
+          if (dupCount > 1) {
+            showAlertModal('「' + picked + '」已經在排表名單上了');
+            nameSelect.value = '';
+            syncRosterNameCustomUI(row);
+            refreshAllRosterNameOptions();
+            scheduleRosterAutoSave();
+            return;
+          }
+        }
         if (!jobSelect.value) {
           var member = currentRosterAttendees.filter(function (m) { return m.name === nameSelect.value; })[0];
           if (member) jobSelect.value = member.job;
@@ -2768,6 +2823,16 @@
       renderRosterSubstituteList('roster-substitutes-list', 'roster-substitutes-count', memberSubstitutes, '目前沒有候補');
       renderRosterSubstituteList('roster-guest-substitutes-list', 'roster-guest-substitutes-count', guestSubstitutes, '目前沒有外援');
       renderRosterSubstituteList('roster-trial-substitutes-list', 'roster-trial-substitutes-count', trialSubstitutes, '目前沒有試訓');
+
+      // 二職候補：當天出勤、有設二職的人，用「二職」顯示。用主職排上的人仍留著（提醒還能當二職），
+      // 只有「已經用二職排上」的人才移除。
+      var secondPlaced = getSecondPlacedNames();
+      var secondPool = currentRosterAttendees
+        .filter(function (m) { return m.job2 && m.job2 !== m.job; })
+        .filter(function (m) { return secondPlaced.indexOf(m.name) === -1; })
+        .map(function (m) { return { name: m.name, job: m.job2 }; })
+        .sort(compareByJob_);
+      renderRosterSubstituteList('roster-second-substitutes-list', 'roster-second-substitutes-count', secondPool, '目前沒有二職候補');
     }
 
     function loadRosterAttendeesForDate(date, callback) {
@@ -3073,13 +3138,16 @@
     function collectRosterData() {
       var rows = Array.prototype.slice.call(document.querySelectorAll('#roster-list .roster-person-row'));
       return rows.map(function (row) {
+        var nm = row.querySelector('.roster-name').value.trim();
+        var jb = row.querySelector('.roster-job').value;
         return {
           group: row.dataset.group,
           team: row.dataset.team,
           slot: row.dataset.slot,
-          name: row.querySelector('.roster-name').value.trim(),
-          job: row.querySelector('.roster-job').value,
-          note: row.querySelector('.roster-note').value.trim()
+          name: nm,
+          job: jb,
+          note: row.querySelector('.roster-note').value.trim(),
+          isSecond: isSecondPlacement_(nm, jb)
         };
       });
     }
@@ -3185,11 +3253,13 @@
       // 註記，跟畫面上排表顯示（rosterDisplayName_）一致。
       var exportCatMap = {};
       (currentRosterAttendees || []).forEach(function (m) { exportCatMap[m.name] = m.category; });
-      function exportAnnotateName(name) {
+      function exportAnnotateName(name, isSecond) {
         if (!name) return name;
-        if (exportCatMap[name] === 'guest') return name + '（外援）';
-        if (exportCatMap[name] === 'trial') return name + '（試訓）';
-        return name;
+        var out = name;
+        if (exportCatMap[name] === 'guest') out += '（外援）';
+        else if (exportCatMap[name] === 'trial') out += '（試訓）';
+        if (isSecond) out += '（二職）';
+        return out;
       }
       function buildSessionPayload(label, result) {
         result = result || {};
@@ -3200,7 +3270,7 @@
           rows: rows.map(function (r) {
             var c = {};
             for (var k in r) { if (Object.prototype.hasOwnProperty.call(r, k)) c[k] = r[k]; }
-            c.name = exportAnnotateName(r.name);
+            c.name = exportAnnotateName(r.name, r.isSecond);
             return c;
           }),
           commanders: result.commanders || [],
