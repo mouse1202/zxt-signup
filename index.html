@@ -2268,6 +2268,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script>
     var JOB_OPTIONS = ['龍吟', '碎夢', '素問', '九靈', '神相', '玄機', '潮光', '鐵衣', '血河'];
 
@@ -2493,6 +2494,7 @@
       var date = getSharedDate();
       loadRosterAttendeesForDate(date, function () {
         applyRosterDataForDate(date, currentRosterSession);
+        subscribeRosterRealtime(); // 換場次 → 重訂即時更新頻道
       });
     }
 
@@ -3047,6 +3049,7 @@
       var date = getSharedDate();
       loadRosterAttendeesForDate(date, function () {
         applyRosterDataForDate(date, currentRosterSession);
+        subscribeRosterRealtime(); // 換日期 → 重訂即時更新頻道
       });
     }
 
@@ -3126,12 +3129,14 @@
         }
         loadRosterAttendeesForDate(date, function () {
           applyRosterDataForDate(date, currentRosterSession);
+          subscribeRosterRealtime(); // 訂閱這天這場的即時更新
         });
       }, false);
       showView('roster-view');
     }
 
     function closeRosterView() {
+      unsubscribeRosterRealtime();
       showView('attendance-view');
     }
 
@@ -3159,6 +3164,67 @@
     function scheduleRosterAutoSave() {
       if (rosterAutoSaveTimer) clearTimeout(rosterAutoSaveTimer);
       rosterAutoSaveTimer = setTimeout(saveRosterData, 500);
+    }
+
+    // ── 排表即時同步（Supabase Realtime Broadcast）──
+    // 某人排表存檔後廣播「這天這場更新了」，其他正在看同一天同場的人收到就整份重載。
+    // 只是「敲門通知」，資料仍走既有 API，不用動 RLS。
+    var REALTIME_URL = 'https://xltdagmzsycnqbflovff.supabase.co';
+    var REALTIME_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhsdGRhZ216c3ljbnFiZmxvdmZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU0MjE1NTcsImV4cCI6MjEwMDk5NzU1N30.Ddb9azBNJFsA8RNbVLRqM37XPksDni43fzNblmHgvUc';
+    var rosterRTClient = null;
+    var rosterRTChannel = null;
+    var rosterRTChannelKey = '';
+    var rosterRTClientId = 'c' + Math.random().toString(36).slice(2) + Date.now();
+
+    function getRosterRTClient() {
+      if (rosterRTClient) return rosterRTClient;
+      if (!(window.supabase && window.supabase.createClient)) return null;
+      try {
+        rosterRTClient = window.supabase.createClient(REALTIME_URL, REALTIME_ANON_KEY);
+      } catch (e) { console.log('Realtime client 建立失敗：' + e.message); rosterRTClient = null; }
+      return rosterRTClient;
+    }
+
+    // 訂閱「目前這天這場」的排表更新頻道；換日期／場次時重訂
+    function subscribeRosterRealtime() {
+      var client = getRosterRTClient();
+      if (!client) return;
+      var date = getSharedDate();
+      var session = currentRosterSession;
+      var key = 'roster:' + date + ':' + session;
+      if (key === rosterRTChannelKey && rosterRTChannel) return; // 已在同一頻道
+      unsubscribeRosterRealtime();
+      rosterRTChannelKey = key;
+      rosterRTChannel = client.channel(key, { config: { broadcast: { self: false } } });
+      rosterRTChannel.on('broadcast', { event: 'changed' }, function (msg) {
+        var p = (msg && msg.payload) || {};
+        if (p.by === rosterRTClientId) return; // 忽略自己發的
+        var onRoster = !document.getElementById('roster-view').classList.contains('hidden');
+        if (!onRoster) return;
+        if (getSharedDate() !== date || currentRosterSession !== session) return;
+        // 依使用者設定「立刻整份更新」：捨棄自己還沒存的暫存編輯，直接重載最新資料
+        if (rosterAutoSaveTimer) { clearTimeout(rosterAutoSaveTimer); rosterAutoSaveTimer = null; }
+        applyRosterDataForDate(date, session);
+        showRosterAutoSaveHint('已同步其他人的更新');
+      });
+      rosterRTChannel.subscribe();
+    }
+
+    function unsubscribeRosterRealtime() {
+      if (rosterRTChannel && rosterRTClient) {
+        try { rosterRTClient.removeChannel(rosterRTChannel); } catch (e) { /* 忽略 */ }
+      }
+      rosterRTChannel = null;
+      rosterRTChannelKey = '';
+    }
+
+    // 自己排表存檔成功後呼叫：廣播給其他人「這天這場更新了」
+    function broadcastRosterChanged(date, session) {
+      if (!rosterRTChannel) return;
+      if (rosterRTChannelKey !== ('roster:' + date + ':' + session)) return;
+      try {
+        rosterRTChannel.send({ type: 'broadcast', event: 'changed', payload: { by: rosterRTClientId, ts: Date.now() } });
+      } catch (e) { /* 忽略 */ }
     }
 
     // 切換日期／場次之前一定要呼叫這個：把還在 debounce 中、還沒真的存到後端的
@@ -3204,6 +3270,7 @@
 
       function onSuccess(res) {
         showRosterAutoSaveHint('已自動儲存');
+        broadcastRosterChanged(date, session); // 通知其他人這天這場更新了
       }
 
       function onFailure(err) {
