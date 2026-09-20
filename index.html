@@ -91,17 +91,13 @@
       margin: 0 calc(50% - 50vw) 6px;
     }
 
-    #main-view { position: relative; }
-    /* 主頁右上角「登出」：純白字加底線，沒有外框/底色 */
+    /* 「登出」：純白字加底線，沒有外框/底色，置中放在影片上傳下方 */
     .logout-link {
-      position: absolute;
-      top: 10px;
-      right: 14px;
-      z-index: 5;
+      display: inline-block;
       background: none;
       border: none;
-      padding: 0;
-      margin: 0;
+      padding: 4px;
+      margin: 2px auto 0;
       color: #ffffff;
       text-decoration: underline;
       font-size: 14px;
@@ -1785,8 +1781,6 @@
 
     <div class="view" id="main-view">
 
-    <button type="button" class="logout-link" onclick="doLogout()">登出</button>
-
     <img src="https://lh3.googleusercontent.com/d/1o9guDRszCEYQF3cv_fkmiZ8Z7wnqWeu_" alt="醉心亭" class="top-image" />
 
     <div class="center-wrap">
@@ -1802,6 +1796,9 @@
       </div>
       <div class="btn-row">
         <button class="nav-btn" onclick="openVideoView()">影片上傳</button>
+      </div>
+      <div class="btn-row">
+        <button type="button" class="logout-link" onclick="doLogout()">登出</button>
       </div>
     </div>
 
