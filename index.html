@@ -91,6 +91,25 @@
       margin: 0 calc(50% - 50vw) 6px;
     }
 
+    #main-view { position: relative; }
+    /* 主頁右上角「登出」：純白字加底線，沒有外框/底色 */
+    .logout-link {
+      position: absolute;
+      top: 10px;
+      right: 14px;
+      z-index: 5;
+      background: none;
+      border: none;
+      padding: 0;
+      margin: 0;
+      color: #ffffff;
+      text-decoration: underline;
+      font-size: 14px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .logout-link:hover { color: #f0d060; }
+
     /* ── Badge ── */
     .badge {
       border: 2px solid #f0d060;
@@ -1765,6 +1784,8 @@
   <div class="container">
 
     <div class="view" id="main-view">
+
+    <button type="button" class="logout-link" onclick="doLogout()">登出</button>
 
     <img src="https://lh3.googleusercontent.com/d/1o9guDRszCEYQF3cv_fkmiZ8Z7wnqWeu_" alt="醉心亭" class="top-image" />
 
@@ -5262,6 +5283,16 @@
        登入成功會把 Gmail 記在瀏覽器（localStorage），下次打開網頁自動幫忙代入、
        不用每次都重打一次。 ── */
     var ACCESS_GATE_EMAIL_STORAGE_KEY = 'zxt_access_email';
+
+    // 登出：清掉記住的 Gmail 與密碼免驗證時間，重新整理回到登入畫面
+    function doLogout() {
+      try {
+        window.localStorage.removeItem(ACCESS_GATE_EMAIL_STORAGE_KEY);
+        window.localStorage.removeItem(FULL_VERIFIED_KEY);
+        window.localStorage.removeItem(EXPORT_VERIFIED_KEY);
+      } catch (e) { /* 無痕模式等情況忽略 */ }
+      window.location.reload();
+    }
 
     function switchAccessGateTab(tab) {
       var isLogin = tab === 'login';
