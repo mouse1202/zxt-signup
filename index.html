@@ -4593,15 +4593,42 @@
     function closeVideoRosterView() { showView('video-view'); }
     function onVideoRosterDateChange() { loadVideoRoster(document.getElementById('vroster-date').value); }
 
-    // 匯出「當月」每個主要成員的影片數量成 Excel。當月＝目前選到的日期的月份（MMDD 開頭）。
+    // 匯出每個主要成員某個月的影片數量成 Excel。先跳出月份選擇對話框（可自選月份）。
     // 欄位：姓名、職業、當月每一場（每格 0/1/2 支影片）、總影片數。純前端用已載入的 XLSX 產生 .xlsx。
     function exportVideoMonthReport() {
       var dateSel = document.getElementById('vroster-date');
-      var date = dateSel ? dateSel.value : '';
-      var mm = /^(\d{2})/.exec(date || '');
-      if (!mm) { showAlertModal('請先在上面選一個日期（用來決定要匯出哪個月）'); return; }
-      var month = mm[1];
-      var monthDates = Array.prototype.map.call(dateSel.options, function (o) { return o.value; })
+      // 可選月份＝日期下拉裡出現過的月份（開頭 MMDD 的 MM）
+      var monthsSeen = {};
+      Array.prototype.forEach.call(dateSel ? dateSel.options : [], function (o) {
+        var m = /^(\d{2})/.exec(o.value); if (m) monthsSeen[m[1]] = (monthsSeen[m[1]] || 0) + 1;
+      });
+      var months = Object.keys(monthsSeen).sort();
+      if (!months.length) { showAlertModal('目前沒有任何場次可以匯出'); return; }
+
+      var overlay = document.getElementById('export-month-modal-overlay');
+      overlay.querySelector('.modal-title').textContent = '匯出當月影片數';
+      overlay.querySelector('.modal-hint').textContent = '選擇要匯出哪個月份的影片數量（只列出目前有場次的月份）';
+      var select = document.getElementById('export-month-modal-select');
+      var confirmBtn = document.getElementById('export-month-modal-confirm');
+      var cancelBtn = document.getElementById('export-month-modal-cancel');
+      var curM = /^(\d{2})/.exec(dateSel ? dateSel.value : '');
+      var optionsHtml = '';
+      months.forEach(function (mm) {
+        optionsHtml += '<option value="' + mm + '"' + ((curM && curM[1] === mm) ? ' selected' : '') + '>' +
+          parseInt(mm, 10) + ' 月（' + monthsSeen[mm] + ' 場）</option>';
+      });
+      select.innerHTML = optionsHtml;
+
+      function cleanup() { overlay.classList.add('hidden'); confirmBtn.onclick = null; cancelBtn.onclick = null; overlay.onclick = null; }
+      overlay.classList.remove('hidden');
+      confirmBtn.onclick = function () { var mm = select.value; cleanup(); runVideoMonthExport(mm); };
+      cancelBtn.onclick = cleanup;
+      overlay.onclick = function (e) { if (e.target === overlay) cleanup(); };
+    }
+
+    function runVideoMonthExport(month) {
+      var dateSel = document.getElementById('vroster-date');
+      var monthDates = Array.prototype.map.call(dateSel ? dateSel.options : [], function (o) { return o.value; })
         .filter(function (v) { var m = /^(\d{2})/.exec(v); return m && m[1] === month; });
       monthDates.sort();
       if (!monthDates.length) { showAlertModal('這個月份沒有場次'); return; }
@@ -4821,6 +4848,8 @@
     function exportAttendanceMonthData() {
       function openPicker(monthOptions) {
         var overlay = document.getElementById('export-month-modal-overlay');
+        overlay.querySelector('.modal-title').textContent = '匯出出勤紀錄';
+        overlay.querySelector('.modal-hint').textContent = '選擇要匯出哪個月份的出勤紀錄（只會列出當月實際有出勤紀錄的日期/場次）';
         var select = document.getElementById('export-month-modal-select');
         var confirmBtn = document.getElementById('export-month-modal-confirm');
         var cancelBtn = document.getElementById('export-month-modal-cancel');
