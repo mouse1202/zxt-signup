@@ -1891,6 +1891,7 @@
           <div class="attendance-date-row">
             <label for="vroster-date" class="attendance-date-label">日期：</label>
             <select id="vroster-date" class="attendance-date-input" onchange="onVideoRosterDateChange()"></select>
+            <button type="button" class="roster-back-btn" id="vroster-export-btn" onclick="exportVideoMonthReport()">匯出當月影片數(Excel)</button>
           </div>
           <div class="member-section-title">上傳清冊</div>
           <div class="video-header-row">
@@ -4591,6 +4592,65 @@
     }
     function closeVideoRosterView() { showView('video-view'); }
     function onVideoRosterDateChange() { loadVideoRoster(document.getElementById('vroster-date').value); }
+
+    // 匯出「當月」每個主要成員的影片數量成 Excel。當月＝目前選到的日期的月份（MMDD 開頭）。
+    // 欄位：姓名、職業、當月每一場（每格 0/1/2 支影片）、總影片數。純前端用已載入的 XLSX 產生 .xlsx。
+    function exportVideoMonthReport() {
+      var dateSel = document.getElementById('vroster-date');
+      var date = dateSel ? dateSel.value : '';
+      var mm = /^(\d{2})/.exec(date || '');
+      if (!mm) { showAlertModal('請先在上面選一個日期（用來決定要匯出哪個月）'); return; }
+      var month = mm[1];
+      var monthDates = Array.prototype.map.call(dateSel.options, function (o) { return o.value; })
+        .filter(function (v) { var m = /^(\d{2})/.exec(v); return m && m[1] === month; });
+      monthDates.sort();
+      if (!monthDates.length) { showAlertModal('這個月份沒有場次'); return; }
+      if (!(window.google && google.script && google.script.run)) { showAlertModal('本機預覽模式，無法匯出'); return; }
+      if (typeof XLSX === 'undefined') { showAlertModal('Excel 元件尚未載入，請稍後再試'); return; }
+
+      var btn = document.getElementById('vroster-export-btn');
+      if (btn) { btn.disabled = true; btn.textContent = '匯出中...'; }
+
+      var results = {}, members = null, pending = monthDates.length + 1;
+      function finish() {
+        pending--;
+        if (pending > 0) return;
+        var cntMap = {}; // name|date -> 0/1/2
+        monthDates.forEach(function (d) {
+          (results[d] || []).forEach(function (p) {
+            cntMap[p.name + '|' + d] = (p.url1 ? 1 : 0) + (p.url2 ? 1 : 0);
+          });
+        });
+        var mem = (members || []).slice().sort(compareByJob_);
+        var header = ['姓名', '職業'].concat(monthDates).concat(['總影片數']);
+        var aoa = [header];
+        mem.forEach(function (p) {
+          var total = 0;
+          var row = [p.name, p.job || ''];
+          monthDates.forEach(function (d) { var c = cntMap[p.name + '|' + d] || 0; total += c; row.push(c); });
+          row.push(total);
+          aoa.push(row);
+        });
+        try {
+          var ws = XLSX.utils.aoa_to_sheet(aoa);
+          var wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, month + '月影片數');
+          var out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+          var url = URL.createObjectURL(new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+          var a = document.createElement('a'); a.href = url; a.download = '醉心亭影片數_' + month + '月.xlsx';
+          document.body.appendChild(a); a.click(); document.body.removeChild(a);
+          setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+        } catch (e) { showAlertModal('匯出失敗：' + e.message); }
+        if (btn) { btn.disabled = false; btn.textContent = '匯出當月影片數(Excel)'; }
+      }
+
+      monthDates.forEach(function (d) {
+        google.script.run.withSuccessHandler(function (r) { results[d] = r || []; finish(); })
+          .withFailureHandler(function () { results[d] = []; finish(); }).getVideoRoster(d);
+      });
+      google.script.run.withSuccessHandler(function (m) { members = m || []; finish(); })
+        .withFailureHandler(function () { members = []; finish(); }).getMemberList();
+    }
 
     function ensureVideoRosterJobFilter() {
       var sel = document.getElementById('vroster-job-filter');
