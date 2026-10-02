@@ -1990,6 +1990,7 @@
             <button type="button" class="roster-back-btn admin-only-btn hidden" onclick="openPasswordGate(renameCurrentDateLabel, 'attendance-view', false)">重新命名</button>
             <button type="button" class="roster-back-btn admin-only-btn hidden" onclick="openPasswordGate(confirmDeleteAttendanceRecord, 'attendance-view', false)">刪除此紀錄</button>
             <button type="button" class="roster-back-btn admin-only-btn hidden" onclick="openPasswordGate(openAttendanceDeadlineControl, 'attendance-view', false)">設定調整截止時間</button>
+            <button type="button" class="roster-back-btn admin-only-btn hidden" id="attendance-unlock-single-btn" onclick="openPasswordGate(toggleSingleDateLock, 'attendance-view', false)">取消時間鎖定</button>
           </div>
           <div class="attendance-date-row hidden" id="attendance-deadline-row">
             <label for="attendance-deadline-date-input" class="attendance-date-label">截止日期：</label>
@@ -4010,6 +4011,10 @@
     var attendanceDeadlines = {}; // 標籤 -> 完整截止時刻字串 'yyyy-MM-ddTHH:MM'（快取）
     var attendanceUnlocked = false; // 本機預覽（無後端）時的解鎖旗標，純前端、僅限本機測試用
     var attendanceTempUnlockUntil = {}; // 標籤 -> 臨時解鎖到期時間戳記（毫秒，後端共用）
+    // 「取消時間鎖定（單場）」用的標記：把這一場的手動截止設成很遠的未來，就等於這一場永不鎖、
+    // 且會覆蓋掉自動鎖，其他場次完全不受影響。恢復時把手動截止清掉，回到自動規則。
+    var ATTENDANCE_NO_LOCK = '2999-12-31T23:59';
+    function isSingleDateUnlocked_(label) { return attendanceDeadlines[label] === ATTENDANCE_NO_LOCK; }
 
     // 自動截止：表單名稱前 4 碼(MMDD)推算活動日，鎖在「活動前一天 23:59」；推不出來回空字串。
     function autoDeadlineForLabel(label) {
@@ -4055,6 +4060,40 @@
         lockRow.classList.remove('hidden');
       } else {
         lockRow.classList.add('hidden');
+      }
+      updateUnlockSingleBtn_();
+    }
+
+    // 依這一場目前是否已被「取消鎖定」，切換按鈕文字
+    function updateUnlockSingleBtn_() {
+      var btn = document.getElementById('attendance-unlock-single-btn');
+      if (!btn) return;
+      btn.textContent = isSingleDateUnlocked_(getSharedDate()) ? '恢復時間鎖定' : '取消時間鎖定';
+    }
+
+    // 取消／恢復「這一場」的時間鎖定（只影響目前選的日期，其他場次不變）
+    function toggleSingleDateLock() {
+      var label = getSharedDate();
+      if (!label) { showAlertModal('請先選擇一個日期/場次'); return; }
+      var unlock = !isSingleDateUnlocked_(label); // 目前沒取消 → 這次要取消鎖定
+
+      function onSuccess() {
+        attendanceDeadlines[label] = unlock ? ATTENDANCE_NO_LOCK : '';
+        applyAttendanceLockState();
+        showAlertModal(unlock
+          ? '已取消「' + label + '」的時間鎖定，這一場任何人都能編輯（其他場次不受影響）。'
+          : '已恢復「' + label + '」的時間鎖定（回到自動規則）。');
+      }
+      function onFailure(err) { showAlertModal('操作失敗：' + err.message); }
+
+      if (window.google && google.script && google.script.run) {
+        if (unlock) {
+          google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFailure).saveAttendanceDeadlineTime(label, ATTENDANCE_NO_LOCK);
+        } else {
+          google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFailure).clearAttendanceDeadlineTime(label);
+        }
+      } else {
+        onSuccess();
       }
     }
 
@@ -4125,6 +4164,7 @@
 
       function fill(cutoff) {
         cutoff = cutoff || '';
+        if (cutoff === ATTENDANCE_NO_LOCK) cutoff = ''; // 已取消鎖定的場次，截止欄位顯示空白
         if (cutoff.indexOf('T') !== -1) {
           var parts = cutoff.split('T');
           dateInput.value = parts[0];
