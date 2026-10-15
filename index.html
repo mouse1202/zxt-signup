@@ -2746,6 +2746,7 @@
         // 用 refreshAllRosterNameOptions 而不是只刷新這一格：
         // 如果這格姓名因為職業不符被清空，其他格要馬上看得到那個人重新可選
         refreshAllRosterNameOptions();
+        broadcastRosterCell(row);
         scheduleRosterAutoSave();
       };
 
@@ -2770,6 +2771,7 @@
         }
         // 這個人被選走/放開了，要讓其他格的姓名選單立刻反映出來
         refreshAllRosterNameOptions();
+        broadcastRosterCell(row);
         scheduleRosterAutoSave();
       };
 
@@ -2778,6 +2780,7 @@
       noteInput.className = 'roster-note';
       noteInput.placeholder = '備註';
       noteInput.onchange = function () {
+        broadcastRosterCell(row);
         scheduleRosterAutoSave();
       };
 
@@ -3099,6 +3102,7 @@
         commanderInput.placeholder = '輸入姓名';
         commanderInput.dataset.group = group.name;
         commanderInput.onchange = function () {
+          broadcastRosterCommander(commanderInput);
           scheduleRosterAutoSave();
         };
         groupTitle.appendChild(commanderInput);
@@ -3216,16 +3220,35 @@
       unsubscribeRosterRealtime();
       rosterRTChannelKey = key;
       rosterRTChannel = client.channel(key, { config: { broadcast: { self: false } } });
+      // 共用的前置檢查：不是自己發的、人還在排表畫面、而且還停在同一天同一場
+      function rtShouldApply(p) {
+        if (p.by === rosterRTClientId) return false; // 忽略自己發的
+        if (document.getElementById('roster-view').classList.contains('hidden')) return false;
+        if (getSharedDate() !== date || currentRosterSession !== session) return false;
+        return true;
+      }
+      // 逐格即時：對方一改某一格（姓名／職業／備註），這裡只更新那一格，
+      // 不整份重載，所以不會蓋掉自己其他格還沒存的編輯。
+      rosterRTChannel.on('broadcast', { event: 'cell' }, function (msg) {
+        var p = (msg && msg.payload) || {};
+        if (!rtShouldApply(p)) return;
+        applyRemoteRosterCell(p);
+      });
+      // 指揮欄即時同步
+      rosterRTChannel.on('broadcast', { event: 'commander' }, function (msg) {
+        var p = (msg && msg.payload) || {};
+        if (!rtShouldApply(p)) return;
+        applyRemoteRosterCommander(p);
+      });
+      // 存檔完成通知：逐格同步已經即時套用過了，這裡只在「自己沒有正在編輯、
+      // 也沒有待存變動」時，才做一次整份重載當作跟權威資料對齊的保險，
+      // 避免像以前那樣把自己還沒存的編輯整份蓋掉。
       rosterRTChannel.on('broadcast', { event: 'changed' }, function (msg) {
         var p = (msg && msg.payload) || {};
-        if (p.by === rosterRTClientId) return; // 忽略自己發的
-        var onRoster = !document.getElementById('roster-view').classList.contains('hidden');
-        if (!onRoster) return;
-        if (getSharedDate() !== date || currentRosterSession !== session) return;
-        // 依使用者設定「立刻整份更新」：捨棄自己還沒存的暫存編輯，直接重載最新資料
-        if (rosterAutoSaveTimer) { clearTimeout(rosterAutoSaveTimer); rosterAutoSaveTimer = null; }
+        if (!rtShouldApply(p)) return;
+        var editing = document.getElementById('roster-list').contains(document.activeElement);
+        if (rosterAutoSaveTimer || editing) return; // 自己正在改 → 不要蓋
         applyRosterDataForDate(date, session);
-        showRosterAutoSaveHint('已同步其他人的更新');
       });
       rosterRTChannel.subscribe();
     }
@@ -3245,6 +3268,76 @@
       try {
         rosterRTChannel.send({ type: 'broadcast', event: 'changed', payload: { by: rosterRTClientId, ts: Date.now() } });
       } catch (e) { /* 忽略 */ }
+    }
+
+    // 逐格即時廣播：某一格（姓名／職業／備註）一有改動就「立刻」送出（不等 500ms 存檔），
+    // 讓同時在排同一天同一場的人馬上看到這格被填了什麼，避免兩個人填同一格。
+    function broadcastRosterCell(row) {
+      if (!rosterRTChannel || !row) return;
+      var date = getSharedDate();
+      var session = currentRosterSession;
+      if (rosterRTChannelKey !== ('roster:' + date + ':' + session)) return;
+      try {
+        rosterRTChannel.send({
+          type: 'broadcast', event: 'cell',
+          payload: {
+            by: rosterRTClientId, ts: Date.now(),
+            g: row.dataset.group, t: row.dataset.team, s: row.dataset.slot,
+            name: row.querySelector('.roster-name').value,
+            job: row.querySelector('.roster-job').value,
+            note: row.querySelector('.roster-note').value
+          }
+        });
+      } catch (e) { /* 忽略 */ }
+    }
+
+    // 指揮欄即時廣播
+    function broadcastRosterCommander(input) {
+      if (!rosterRTChannel || !input) return;
+      var date = getSharedDate();
+      var session = currentRosterSession;
+      if (rosterRTChannelKey !== ('roster:' + date + ':' + session)) return;
+      try {
+        rosterRTChannel.send({
+          type: 'broadcast', event: 'commander',
+          payload: { by: rosterRTClientId, ts: Date.now(), g: input.dataset.group, name: input.value }
+        });
+      } catch (e) { /* 忽略 */ }
+    }
+
+    // 收到對方某一格的改動：只更新那一格。若自己此刻正停在那一格上編輯，
+    // 就不硬蓋（避免把字從手裡搶走），改成跳提醒讓兩人自己協調。
+    function applyRemoteRosterCell(p) {
+      var rows = Array.prototype.slice.call(document.querySelectorAll('#roster-list .roster-person-row'));
+      var row = rows.filter(function (r) {
+        return r.dataset.group === p.g && r.dataset.team === p.t && String(r.dataset.slot) === String(p.s);
+      })[0];
+      if (!row) return;
+      if (row.contains(document.activeElement)) {
+        showRosterAutoSaveHint('⚠ 有人也在改這格，暫不覆蓋你的輸入');
+        return;
+      }
+      var jobSelect = row.querySelector('.roster-job');
+      var nameSelect = row.querySelector('.roster-name');
+      var noteInput = row.querySelector('.roster-note');
+      // 跟「從資料庫載入一格」同一套做法：先設職業、依職業重建姓名選項、再設姓名，
+      // 最後統一跑一次排除規則，確保對方填的姓名一定設得回去。
+      jobSelect.value = p.job || '';
+      nameSelect.innerHTML = buildRosterNameOptionsHtml(jobSelect.value);
+      nameSelect.value = p.name || '';
+      noteInput.value = p.note || '';
+      refreshAllRosterNameOptions();
+      syncRosterNameCustomUI(row);
+      showRosterAutoSaveHint('已同步其他人的編輯');
+    }
+
+    function applyRemoteRosterCommander(p) {
+      var input = Array.prototype.slice.call(document.querySelectorAll('.roster-commander-input'))
+        .filter(function (i) { return i.dataset.group === p.g; })[0];
+      if (!input) return;
+      if (document.activeElement === input) return; // 自己正在打這格指揮，不硬蓋
+      input.value = p.name || '';
+      showRosterAutoSaveHint('已同步其他人的編輯');
     }
 
     // 切換日期／場次之前一定要呼叫這個：把還在 debounce 中、還沒真的存到後端的
